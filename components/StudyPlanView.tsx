@@ -25,7 +25,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ plan, examCode, onBackToR
             const saved = localStorage.getItem(storageKey);
             return saved ? JSON.parse(saved) : [];
         } catch (e) {
-            console.error("Failed to parse completed topics from localStorage", e);
+            console.error("Falha ao analisar tópicos concluídos do localStorage", e);
             return [];
         }
     });
@@ -49,7 +49,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ plan, examCode, onBackToR
                 return <h3 key={index} className="text-xl font-semibold mt-6 mb-2 text-white" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('### ', '')) }} />;
             }
             if (line.trim().startsWith('## ')) {
-                return <h2 key={index} className="text-2xl font-bold mt-8 mb-4 border-b border-gray-600 pb-2 text-cyan-400" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('## ', '')) }} />;
+                return <h2 key={index} className="text-2xl font-bold mt-8 mb-4 border-b border-slate-600 pb-2 text-cyan-400" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('## ', '')) }} />;
             }
             if (line.trim().startsWith('# ')) {
                 return <h1 key={index} className="text-3xl font-bold mt-6 mb-4 text-white" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('# ', '')) }} />;
@@ -64,7 +64,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ plan, examCode, onBackToR
                             id={`topic-${index}`}
                             checked={isCompleted}
                             onChange={() => handleToggleTopic(topicText)}
-                            className="mt-1 h-5 w-5 rounded text-cyan-600 bg-gray-900 border-gray-500 focus:ring-cyan-500 focus:ring-offset-0 cursor-pointer"
+                            className="mt-1 h-5 w-5 rounded text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500 focus:ring-offset-slate-800 cursor-pointer"
                         />
                         <label
                             htmlFor={`topic-${index}`}
@@ -85,16 +85,16 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ plan, examCode, onBackToR
     return (
         <div className="max-w-4xl mx-auto">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-                <button onClick={onBackToResults} className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-semibold">
+                <button onClick={onBackToResults} className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
                     <ArrowLeftIcon className="w-5 h-5" />
                     Voltar aos Resultados
                 </button>
-                 <button onClick={onRegenerate} className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-white font-semibold transition">
+                 <button onClick={onRegenerate} className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-md text-white font-semibold transition-colors">
                     <ArrowPathIcon className="w-5 h-5" />
                     Regenerar Plano
                 </button>
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 md:p-8">
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-lg">
                 <h1 className="text-3xl font-bold text-white mb-6">Seu Plano de Estudos Personalizado</h1>
                 <div className="text-gray-300 leading-relaxed space-y-2">
                    {renderPlan()}

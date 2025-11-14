@@ -60,15 +60,15 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
 
     return (
         <div className="max-w-4xl mx-auto">
-             <button onClick={onBack} className="flex items-center gap-2 mb-6 text-cyan-400 hover:text-cyan-300">
+             <button onClick={onBack} className="flex items-center gap-2 mb-6 text-cyan-400 hover:text-cyan-300 transition-colors">
                 <ArrowLeftIcon className="w-5 h-5" />
                 Voltar à Configuração
             </button>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 flex flex-col">
+                <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 flex flex-col shadow-lg">
                     <h2 className="text-2xl font-bold text-white mb-4">Analisador de Imagem</h2>
                     <div className="flex-grow flex flex-col gap-4">
-                        <div className="w-full h-64 bg-gray-900 rounded-md flex items-center justify-center overflow-hidden">
+                        <div className="w-full h-64 bg-slate-800/60 rounded-md flex items-center justify-center overflow-hidden border border-slate-700">
                             {imagePreview ? (
                                 <img src={imagePreview} alt="Preview" className="max-w-full max-h-full object-contain" />
                             ) : (
@@ -78,24 +78,24 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
                                 </div>
                             )}
                         </div>
-                        <input type="file" id="image-upload" onChange={handleFileChange} accept="image/*" className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-900/50 file:text-cyan-300 hover:file:bg-cyan-900" />
+                        <input type="file" id="image-upload" onChange={handleFileChange} accept="image/*" className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-900/50 file:text-cyan-300 hover:file:bg-cyan-900/70 transition-colors" />
                         
                         <textarea
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             rows={3}
-                            className="w-full bg-gray-900 border border-gray-600 rounded-md focus:ring-cyan-500 focus:border-cyan-500 text-gray-200 p-2"
+                            className="w-full bg-slate-800/60 border border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-200 p-2 transition-colors"
                             placeholder="Ex: Explique este diagrama de arquitetura de nuvem..."
                         />
                     </div>
-                     <button onClick={handleAnalyzeClick} disabled={isLoading || !imageFile || !prompt} className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-2 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition">
+                     <button onClick={handleAnalyzeClick} disabled={isLoading || !imageFile || !prompt} className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-2 border border-transparent text-base font-medium rounded-md text-white bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200 shadow-lg hover:shadow-indigo-500/30">
                         <SparklesIcon className="w-5 h-5" />
                         Analisar com Gemini
                     </button>
                 </div>
-                <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
+                <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 shadow-lg">
                     <h2 className="text-2xl font-bold text-white mb-4">Análise</h2>
-                    <div className="w-full h-full min-h-[300px] bg-gray-900/50 rounded-md p-4 text-gray-300 overflow-y-auto">
+                    <div className="w-full h-full min-h-[300px] bg-slate-800/60 rounded-md p-4 text-gray-300 overflow-y-auto border border-slate-700">
                         {isLoading && <LoadingIndicator message="Analisando..." />}
                         {error && <p className="text-red-400">{error}</p>}
                         {analysis && <p className="whitespace-pre-wrap">{analysis}</p>}

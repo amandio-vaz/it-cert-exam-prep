@@ -218,11 +218,14 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 text-gray-100 flex flex-col font-sans">
+        <div className="min-h-screen text-gray-200 flex flex-col font-sans">
             <Header />
-            <main className="flex-grow container mx-auto p-4 md:p-8">
+            <main className="flex-grow container mx-auto p-4 md:p-8 fade-in">
                 {renderContent()}
             </main>
+            <footer className="text-center py-6 text-gray-500 text-sm fade-in" style={{ animationDelay: '200ms' }}>
+                <p>Powered by Amândio Vaz - 2025</p>
+            </footer>
         </div>
     );
 };
