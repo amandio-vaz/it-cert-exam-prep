@@ -46,4 +46,9 @@ export interface UploadedFile {
     content: string; // base64 encoded content
 }
 
-export type AppState = 'config' | 'generating' | 'taking_exam' | 'results' | 'analyzing_image' | 'generating_study_plan' | 'study_plan' | 'reviewing_exam';
+export interface Flashcard {
+    question: string;
+    answer: string;
+}
+
+export type AppState = 'config' | 'generating' | 'taking_exam' | 'results' | 'analyzing_image' | 'generating_study_plan' | 'study_plan' | 'reviewing_exam' | 'viewing_flashcards';

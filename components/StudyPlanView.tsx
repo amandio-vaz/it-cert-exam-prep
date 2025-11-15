@@ -10,11 +10,12 @@ interface StudyPlanViewProps {
 }
 
 const parseInlineMarkdown = (text: string): string => {
+    // Adicionamos classes específicas para o tema claro no HTML gerado
     return text
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code class="bg-gray-700 text-cyan-300 rounded px-1 py-0.5 font-mono text-sm">$1</code>')
-        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline">$1</a>');
+        .replace(/`([^`]+)`/g, '<code class="bg-gray-200 text-cyan-700 dark:bg-gray-700 dark:text-cyan-300 rounded px-1 py-0.5 font-mono text-sm">$1</code>')
+        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-600 dark:text-cyan-400 hover:underline">$1</a>');
 };
 
 
@@ -46,13 +47,13 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ plan, examCode, onBackToR
         const lines = plan.split('\n');
         return lines.map((line, index) => {
             if (line.trim().startsWith('### ')) {
-                return <h3 key={index} className="text-xl font-semibold mt-6 mb-2 text-white" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('### ', '')) }} />;
+                return <h3 key={index} className="text-xl font-semibold mt-6 mb-2 text-gray-800 dark:text-white" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('### ', '')) }} />;
             }
             if (line.trim().startsWith('## ')) {
-                return <h2 key={index} className="text-2xl font-bold mt-8 mb-4 border-b border-slate-600 pb-2 text-cyan-400" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('## ', '')) }} />;
+                return <h2 key={index} className="text-2xl font-bold mt-8 mb-4 border-b border-gray-300 dark:border-slate-600 pb-2 text-cyan-600 dark:text-cyan-400" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('## ', '')) }} />;
             }
             if (line.trim().startsWith('# ')) {
-                return <h1 key={index} className="text-3xl font-bold mt-6 mb-4 text-white" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('# ', '')) }} />;
+                return <h1 key={index} className="text-3xl font-bold mt-6 mb-4 text-gray-900 dark:text-white" dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(line.replace('# ', '')) }} />;
             }
             if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
                 const topicText = line.trim().substring(2).trim();
@@ -64,11 +65,11 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ plan, examCode, onBackToR
                             id={`topic-${index}`}
                             checked={isCompleted}
                             onChange={() => handleToggleTopic(topicText)}
-                            className="mt-1 h-5 w-5 rounded text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500 focus:ring-offset-slate-800 cursor-pointer"
+                            className="mt-1 h-5 w-5 rounded text-cyan-600 dark:text-cyan-500 bg-gray-100 dark:bg-slate-900 border-gray-400 dark:border-slate-600 focus:ring-cyan-500 focus:ring-offset-white dark:focus:ring-offset-slate-800 cursor-pointer"
                         />
                         <label
                             htmlFor={`topic-${index}`}
-                            className={`flex-1 text-gray-300 transition-colors cursor-pointer ${isCompleted ? 'line-through text-gray-500' : ''}`}
+                            className={`flex-1 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer ${isCompleted ? 'line-through text-gray-500 dark:text-gray-500' : ''}`}
                             dangerouslySetInnerHTML={{ __html: parseInlineMarkdown(topicText) }} 
                         />
                     </div>
@@ -85,18 +86,18 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ plan, examCode, onBackToR
     return (
         <div className="max-w-4xl mx-auto">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-                <button onClick={onBackToResults} className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+                <button onClick={onBackToResults} className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 font-semibold transition-colors">
                     <ArrowLeftIcon className="w-5 h-5" />
                     Voltar aos Resultados
                 </button>
-                 <button onClick={onRegenerate} className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-md text-white font-semibold transition-colors">
+                 <button onClick={onRegenerate} className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded-md text-gray-800 dark:text-white font-semibold transition-colors">
                     <ArrowPathIcon className="w-5 h-5" />
                     Regenerar Plano
                 </button>
             </div>
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 md:p-8 shadow-lg">
-                <h1 className="text-3xl font-bold text-white mb-6">Seu Plano de Estudos Personalizado</h1>
-                <div className="text-gray-300 leading-relaxed space-y-2">
+            <div className="bg-white dark:bg-slate-900/50 backdrop-blur-sm border border-gray-200 dark:border-slate-700/50 rounded-xl p-6 md:p-8 shadow-lg">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Seu Plano de Estudos Personalizado</h1>
+                <div className="text-gray-700 dark:text-gray-300 leading-relaxed space-y-2">
                    {renderPlan()}
                 </div>
             </div>

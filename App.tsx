@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppState, ExamData, Attempt, Question, UserAnswer, UploadedFile } from './types';
 import { generateExam, generateStudyPlan, analyzeImageWithGemini } from './services/geminiService';
@@ -11,14 +12,14 @@ import StudyPlanView from './components/StudyPlanView';
 import ImageAnalyzerView from './components/ImageAnalyzerView';
 import LoadingIndicator from './components/LoadingIndicator';
 import ReviewView from './components/ReviewView';
+import FlashcardView from './components/FlashcardView';
 
 const App: React.FC = () => {
     const [appState, setAppState] = useState<AppState>('config');
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-    const [urls, setUrls] = useState<string>('');
     const [examCode, setExamCode] = useState<string>('');
+    const [extraTopics, setExtraTopics] = useState<string>('');
     const [questionCount, setQuestionCount] = useState<number>(10);
-    const [useThinkingMode, setUseThinkingMode] = useState<boolean>(false);
     
     const [examData, setExamData] = useState<ExamData | null>(null);
     const [userAnswers, setUserAnswers] = useState<UserAnswer>({});
@@ -28,6 +29,27 @@ const App: React.FC = () => {
     const [questionsToReview, setQuestionsToReview] = useState<Question[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [initialTimeLeft, setInitialTimeLeft] = useState<number | null>(null);
+    const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
+    const [generationStatus, setGenerationStatus] = useState<string>('');
+
+
+    useEffect(() => {
+        // Define o tema inicial com base no localStorage ou preferência do sistema
+        const savedTheme = localStorage.getItem('cortexExamTheme') as 'light' | 'dark' | null;
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+    }, []);
+
+    useEffect(() => {
+        // Aplica a classe de tema ao elemento raiz e salva a preferência
+        if (theme) {
+            const root = window.document.documentElement;
+            root.classList.remove('light', 'dark');
+            root.classList.add(theme);
+            localStorage.setItem('cortexExamTheme', theme);
+        }
+    }, [theme]);
+
 
     useEffect(() => {
         const savedProgress = localStorage.getItem('cortexExamProgress');
@@ -53,16 +75,21 @@ const App: React.FC = () => {
         }
     }, []);
 
-    const handleStartExam = useCallback(async () => {
-        if (!examCode || (uploadedFiles.length === 0 && !urls)) {
-            setError('Por favor, forneça um código de exame e pelo menos um material de estudo (arquivo ou URL).');
+    const handleStartExam = useCallback(async (language: 'pt-BR' | 'en-US') => {
+        if (!examCode || uploadedFiles.length === 0) {
+            setError('Por favor, forneça um código de exame e pelo menos um material de estudo.');
             return;
         }
         setError(null);
         localStorage.removeItem('cortexExamProgress');
         setAppState('generating');
+        setGenerationStatus("Iniciando a geração do seu exame...");
         try {
-            const exam = await generateExam(uploadedFiles, urls.split('\n').filter(u => u.trim() !== ''), examCode, questionCount, useThinkingMode);
+            const onStatusUpdate = (status: string) => {
+                setGenerationStatus(status);
+            };
+
+            const exam = await generateExam(uploadedFiles, examCode, questionCount, extraTopics, onStatusUpdate, language);
             
             const initialProgress = {
                 appState: 'taking_exam',
@@ -79,10 +106,16 @@ const App: React.FC = () => {
             setAppState('taking_exam');
         } catch (e) {
             console.error(e);
-            setError('Falha ao gerar o exame. Verifique o console para mais detalhes.');
+            let errorMessage = 'Falha ao gerar o exame. A IA pode estar sobrecarregada ou o conteúdo fornecido pode ser inválido. Tente novamente.';
+            if (e instanceof Error && e.message.includes('exceeds the supported page limit')) {
+                errorMessage = 'Um dos PDFs fornecidos excede o limite de 1000 páginas. Por favor, use um arquivo menor ou divida-o.';
+            }
+            setError(errorMessage);
             setAppState('config');
+        } finally {
+            setGenerationStatus('');
         }
-    }, [examCode, uploadedFiles, urls, questionCount, useThinkingMode, attempts]);
+    }, [examCode, uploadedFiles, questionCount, extraTopics, attempts]);
 
     const handleFinishExam = useCallback((finalAnswers: UserAnswer) => {
         if (!examData) return;
@@ -138,16 +171,11 @@ const App: React.FC = () => {
 
     const handleStartReview = useCallback(() => {
         if (!examData) return;
-        const incorrect = examData.questions.filter(q => {
-            const correct = q.correctAnswers;
-            const user = userAnswers[q.id] || [];
-            return !(correct.length === user.length && correct.every(val => user.includes(val)));
-        });
-        setQuestionsToReview(incorrect);
+        setQuestionsToReview(examData.questions);
         setAppState('reviewing_exam');
-    }, [examData, userAnswers]);
+    }, [examData]);
 
-    const resetToConfig = () => {
+    const returnToConfig = () => {
         setExamData(null);
         setUserAnswers({});
         setCurrentAttempt(null);
@@ -157,6 +185,12 @@ const App: React.FC = () => {
         setAppState('config');
         localStorage.removeItem('cortexExamProgress');
     };
+    
+    const handleViewFlashcards = () => setAppState('viewing_flashcards');
+
+    const toggleTheme = () => {
+        setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+    };
 
     const renderContent = () => {
         switch (appState) {
@@ -164,26 +198,26 @@ const App: React.FC = () => {
                 return <ConfigView 
                             uploadedFiles={uploadedFiles}
                             setUploadedFiles={setUploadedFiles}
-                            urls={urls}
-                            setUrls={setUrls}
                             examCode={examCode}
                             setExamCode={setExamCode}
+                            extraTopics={extraTopics}
+                            setExtraTopics={setExtraTopics}
                             questionCount={questionCount}
                             setQuestionCount={setQuestionCount}
-                            useThinkingMode={useThinkingMode}
-                            setUseThinkingMode={setUseThinkingMode}
+                            attempts={attempts}
                             onStartExam={handleStartExam}
-                            onAnalyzeImageClick={() => setAppState('analyzing_image')}
+                            onViewFlashcards={handleViewFlashcards}
                             error={error}
                         />;
             case 'generating':
-                return <LoadingIndicator message="Gerando seu exame simulado... A IA está analisando seus materiais e criando questões." />;
+                return <LoadingIndicator message={generationStatus || "Gerando seu plano de estudo... A IA está analisando seus materiais e criando questões."} />;
             case 'taking_exam':
                 return examData && <ExamView 
                                         examData={examData} 
                                         onFinishExam={handleFinishExam} 
                                         initialAnswers={userAnswers}
                                         initialTimeLeft={initialTimeLeft}
+                                        attempts={attempts}
                                     />;
             case 'results':
                 return examData && currentAttempt && <ResultsView 
@@ -191,7 +225,7 @@ const App: React.FC = () => {
                                                         userAnswers={userAnswers} 
                                                         attempt={currentAttempt}
                                                         history={attempts}
-                                                        onTryAgain={resetToConfig}
+                                                        onTryAgain={returnToConfig}
                                                         onGenerateStudyPlan={handleGenerateStudyPlan}
                                                         onStartReview={handleStartReview}
                                                      />;
@@ -212,19 +246,25 @@ const App: React.FC = () => {
                             userAnswers={userAnswers} 
                             onBackToResults={() => setAppState('results')} 
                         />;
+            case 'viewing_flashcards':
+                return <FlashcardView onBack={returnToConfig} />;
             default:
                 return <div>Estado desconhecido</div>;
         }
     };
+    
+    if (!theme) {
+      return null; // ou um spinner de carregamento inicial
+    }
 
     return (
-        <div className="min-h-screen text-gray-200 flex flex-col font-sans">
-            <Header />
+        <div className="min-h-screen flex flex-col font-sans">
+            {appState !== 'config' && <Header theme={theme} onToggleTheme={toggleTheme} />}
             <main className="flex-grow container mx-auto p-4 md:p-8 fade-in">
                 {renderContent()}
             </main>
-            <footer className="text-center py-6 text-gray-500 text-sm fade-in" style={{ animationDelay: '200ms' }}>
-                <p>Powered by Amândio Vaz - 2025</p>
+            <footer className="text-center py-6 text-gray-500 dark:text-gray-500 text-sm fade-in" style={{ animationDelay: '200ms' }}>
+                <p>Desenvolvido com ❤️ por Amândio Vaz - 2025</p>
             </footer>
         </div>
     );

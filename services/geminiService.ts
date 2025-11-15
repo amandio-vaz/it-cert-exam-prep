@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/genai";
 import { UploadedFile, ExamData, Question, UserAnswer, Attempt, QuestionType } from '../types';
 
@@ -9,24 +8,6 @@ if (!API_KEY) {
   console.warn("API_KEY environment variable not found.");
 }
 const ai = new GoogleGenAI({ apiKey: API_KEY });
-
-const getSystemPrompt = (examCode: string) => `
-Você é um especialista avançado em preparação para exames de certificação de TI. Seu objetivo principal é ajudar os usuários a se prepararem de forma ética e eficaz, sem trapacear ou acessar perguntas reais do exame.
-
-1. Identificação do Exame:
-   - Com base no código do exame fornecido ('${examCode}'), identifique o nome oficial completo da certificação.
-
-2. Análise de Conteúdo:
-   - Analise profundamente o conteúdo fornecido pelo usuário (arquivos e URLs).
-   - Use o Google Search para complementar e validar as informações, garantindo que estejam alinhadas com os objetivos atuais do exame.
-   - NÃO reproduza perguntas proprietárias de bancos de exames. Crie perguntas ORIGINAIS inspiradas nos tópicos do exame.
-
-3. Geração de Exame Prático:
-   - Gere um conjunto de questões realistas com base na análise.
-   - A resposta DEVE ser um objeto JSON bem formado que corresponda ao esquema fornecido.
-   - Inclua diversos tipos de questões (escolha única, múltipla escolha, etc.).
-   - Para cada questão, forneça o texto da pergunta, opções, a(s) resposta(s) correta(s), uma explicação detalhada (porque a correta está certa e as erradas estão erradas) e o domínio/objetivo do exame correspondente.
-`;
 
 const examSchema = {
   type: Type.OBJECT,
@@ -67,25 +48,126 @@ const examSchema = {
   required: ['examCode', 'examName', 'questions'],
 };
 
+const getSystemPrompt = (examCode: string, language: 'pt-BR' | 'en-US') => {
+    if (language === 'en-US') {
+        return `
+You are an advanced expert in IT certification exam preparation. Your main goal is to help users prepare ethically and effectively, without cheating or accessing real exam questions.
 
-export const generateExam = async (files: UploadedFile[], urls: string[], examCode: string, questionCount: number, useThinkingMode: boolean): Promise<ExamData> => {
-    const modelName = useThinkingMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
-    const systemInstruction = getSystemPrompt(examCode);
+1. Exam Identification:
+   - Based on the provided exam code ('${examCode}'), identify the full official name of the certification.
 
-    const fileParts = files.map(file => ({
-        inlineData: {
-            mimeType: file.type,
-            data: file.content,
-        },
-    }));
+2. Content Analysis:
+   - Deeply analyze the content provided by the user (summaries of study materials).
+   - Use Google Search to supplement and validate the information, ensuring it aligns with the current exam objectives.
+   - DO NOT reproduce proprietary questions from exam dumps. Create ORIGINAL questions inspired by the exam topics.
 
-    const urlText = urls.length > 0 ? `\n\nURLs de referência:\n${urls.join('\n')}` : '';
-    const userPrompt = `Gere um exame prático de ${questionCount} questões para o exame ${examCode}. Baseie-se nos arquivos e URLs fornecidos.${urlText}`;
-    
+3. Practice Exam Generation:
+   - Generate a set of realistic questions based on the analysis.
+   - Your response MUST be ONLY a valid JSON object, with no other text, markdown, or explanation before or after it.
+   - The JSON must strictly adhere to the following schema:
+   ${JSON.stringify(examSchema, null, 2)}
+`;
+    }
+
+    return `
+Você é um especialista avançado em preparação para exames de certificação de TI. Seu objetivo principal é ajudar os usuários a se prepararem de forma ética e eficaz, sem trapacear ou acessar perguntas reais do exame.
+
+1. Identificação do Exame:
+   - Com base no código do exame fornecido ('${examCode}'), identifique o nome oficial completo da certificação.
+
+2. Análise de Conteúdo:
+   - Analise profundamente o conteúdo fornecido pelo usuário (resumos dos materiais de estudo).
+   - Use o Google Search para complementar e validar as informações, garantindo que estejam alinhadas com os objetivos atuais do exame.
+   - NÃO reproduza perguntas proprietárias de bancos de exames. Crie perguntas ORIGINAIS inspiradas nos tópicos do exame.
+
+3. Geração de Exame Prático:
+   - Gere um conjunto de questões realistas com base na análise.
+   - A sua resposta DEVE ser APENAS um objeto JSON válido, sem nenhum outro texto, markdown ou explicação antes ou depois dele.
+   - O JSON deve seguir estritamente o seguinte esquema:
+   ${JSON.stringify(examSchema, null, 2)}
+`;
+};
+
+// Função auxiliar para resumir e extrair pontos-chave de um único arquivo.
+const distillFileContent = async (file: UploadedFile, examCode: string, language: 'pt-BR' | 'en-US'): Promise<string> => {
+    const modelName = 'gemini-2.5-flash';
+    const prompt = language === 'en-US'
+        ? `You are an IT certification expert. Concisely extract and summarize all key concepts, technical details, and important topics from the provided document relevant to the '${examCode}' certification. Focus on information likely to appear on the exam. Return only the summarized text.`
+        : `Você é um especialista em certificações de TI. Extraia e resuma de forma concisa todos os conceitos-chave, detalhes técnicos e tópicos importantes do documento fornecido que sejam relevantes para a certificação '${examCode}'. Foque nas informações que provavelmente apareceriam no exame. Retorne apenas o texto resumido.`;
+
+
     const contents = [{
         role: "user",
         parts: [
-            ...fileParts,
+            { inlineData: { mimeType: file.type, data: file.content } },
+            { text: prompt }
+        ]
+    }];
+
+    try {
+        const response = await ai.models.generateContent({
+            model: modelName,
+            contents,
+        });
+        return response.text;
+    } catch (error) {
+        console.error(`Falha ao resumir o arquivo ${file.name}:`, error);
+        // Retorna uma mensagem de erro para que o usuário saiba que um arquivo falhou, mas não quebra o processo.
+        return `[Erro ao processar o arquivo ${file.name}]`;
+    }
+};
+
+export const generateExam = async (
+    files: UploadedFile[], 
+    examCode: string, 
+    questionCount: number, 
+    extraTopics: string,
+    onStatusUpdate: (status: string) => void,
+    language: 'pt-BR' | 'en-US'
+): Promise<ExamData> => {
+    const modelName = 'gemini-2.5-flash';
+    
+    // Etapa 1: Destilar o conteúdo de cada arquivo para evitar exceder o limite de tokens.
+    const summaryStatusMsg = language === 'en-US'
+        ? `Summarizing ${files.length} file(s)...`
+        : `Resumindo ${files.length} arquivo(s)...`;
+    onStatusUpdate(`${summaryStatusMsg} (Step 1 of 2)`);
+    
+    const distillationPromises = files.map(async (file, index) => {
+        const summary = await distillFileContent(file, examCode, language);
+        const completedMsg = language === 'en-US' ? 'completed' : 'concluídos';
+        onStatusUpdate(`${summaryStatusMsg} (${index + 1}/${files.length} ${completedMsg})`);
+        return summary;
+    });
+    const distilledContents = await Promise.all(distillationPromises);
+    const combinedSummaries = distilledContents.join('\n\n---\n\n');
+
+    // Etapa 2: Gerar o exame usando os resumos.
+    const generationStatusMsg = language === 'en-US'
+        ? "Generating questions based on summaries... (Step 2 of 2)"
+        : "Gerando questões com base nos resumos... (Etapa 2 de 2)";
+    onStatusUpdate(generationStatusMsg);
+    
+    const systemInstruction = getSystemPrompt(examCode, language);
+    
+    const extraTopicsPrompt = {
+        'pt-BR': `\n\nConsidere também estes tópicos ou perguntas extras com alta prioridade:\n${extraTopics}`,
+        'en-US': `\n\nAlso, consider these extra topics or questions with high priority:\n${extraTopics}`
+    };
+    const extraTopicsText = extraTopics.trim() ? extraTopicsPrompt[language] : '';
+    
+    const userPromptText = {
+        'pt-BR': `Com base nos resumos dos materiais de estudo fornecidos, gere um exame prático de ${questionCount} questões para a certificação ${examCode}.${extraTopicsText}`,
+        'en-US': `Based on the provided summaries of the study materials, generate a ${questionCount}-question practice exam for the ${examCode} certification.${extraTopicsText}`
+    };
+    const userPrompt = userPromptText[language];
+    
+    const summariesHeader = language === 'en-US' ? "Study material summaries:\n\n" : "Resumos dos materiais de estudo:\n\n";
+
+    const contents = [{
+        role: "user",
+        parts: [
+            { text: summariesHeader + combinedSummaries },
             { text: userPrompt }
         ]
     }];
@@ -93,9 +175,6 @@ export const generateExam = async (files: UploadedFile[], urls: string[], examCo
     const config = {
         systemInstruction,
         tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: examSchema,
-        ...(useThinkingMode && { thinkingConfig: { thinkingBudget: 32768 } }),
     };
 
     const response = await ai.models.generateContent({
@@ -104,15 +183,25 @@ export const generateExam = async (files: UploadedFile[], urls: string[], examCo
         config
     });
 
-    const jsonText = response.text.trim();
+    let jsonText = response.text.trim();
+    
+    // Tenta extrair o JSON de um bloco de código markdown, se existir.
+    const markdownJsonRegex = /```json\s*([\s\S]*?)\s*```/;
+    const match = jsonText.match(markdownJsonRegex);
+
+    if (match && match[1]) {
+        jsonText = match[1];
+    }
+
     try {
         const parsedJson = JSON.parse(jsonText);
         return parsedJson as ExamData;
     } catch (error) {
         console.error("Failed to parse JSON response:", jsonText);
-        throw new Error("A resposta da IA não estava em um formato JSON válido.");
+        throw new Error("A resposta da IA não estava em um formato JSON válido, mesmo após a tentativa de extração.");
     }
 };
+
 
 export const generateStudyPlan = async (examData: ExamData, userAnswers: UserAnswer, attempt: Attempt): Promise<string> => {
     const incorrectQuestions = examData.questions.filter(q => {

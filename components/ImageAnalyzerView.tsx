@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback } from 'react';
 import { UploadedFile } from '../types';
 import { fileToBase64 } from '../utils/fileUtils';
@@ -17,11 +18,22 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
     const [analysis, setAnalysis] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [fileError, setFileError] = useState<string | null>(null);
 
     const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // Adiciona validação para garantir que é um arquivo de imagem
+            if (!file.type.startsWith('image/')) {
+                setFileError('Arquivo inválido. Por favor, selecione uma imagem (ex: PNG, JPG, WEBP).');
+                setImageFile(null);
+                setImagePreview(null);
+                e.target.value = ''; // Reseta o input de arquivo
+                return;
+            }
+
             try {
+                setFileError(null); // Limpa erros anteriores de arquivo
                 const content = await fileToBase64(file);
                 const uploadedFile = { name: file.name, type: file.type, content };
                 setImageFile(uploadedFile);
@@ -35,7 +47,7 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
                 setAnalysis('');
                 setError(null);
             } catch (err) {
-                setError("Falha ao carregar a imagem.");
+                setFileError("Falha ao processar a imagem.");
             }
         }
     }, []);
@@ -45,6 +57,8 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
             setError("Por favor, carregue uma imagem e escreva uma pergunta.");
             return;
         }
+        if (fileError) return;
+
         setIsLoading(true);
         setError(null);
         setAnalysis('');
@@ -60,46 +74,49 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
 
     return (
         <div className="max-w-4xl mx-auto">
-             <button onClick={onBack} className="flex items-center gap-2 mb-6 text-cyan-400 hover:text-cyan-300 transition-colors">
+             <button onClick={onBack} className="flex items-center gap-2 mb-6 text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 transition-colors">
                 <ArrowLeftIcon className="w-5 h-5" />
                 Voltar à Configuração
             </button>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 flex flex-col shadow-lg">
-                    <h2 className="text-2xl font-bold text-white mb-4">Analisador de Imagem</h2>
+                <div className="bg-white dark:bg-slate-900/50 backdrop-blur-sm border border-gray-200 dark:border-slate-700/50 rounded-xl p-6 flex flex-col shadow-lg">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Analisador de Imagem</h2>
                     <div className="flex-grow flex flex-col gap-4">
-                        <div className="w-full h-64 bg-slate-800/60 rounded-md flex items-center justify-center overflow-hidden border border-slate-700">
+                        <div className="w-full h-64 bg-gray-100 dark:bg-slate-800/60 rounded-md flex items-center justify-center overflow-hidden border border-gray-300 dark:border-slate-700">
                             {imagePreview ? (
                                 <img src={imagePreview} alt="Preview" className="max-w-full max-h-full object-contain" />
                             ) : (
-                                <div className="text-center text-gray-500">
+                                <div className="text-center text-gray-400 dark:text-gray-500">
                                     <PhotoIcon className="w-16 h-16 mx-auto"/>
                                     <p>Pré-visualização da imagem</p>
                                 </div>
                             )}
                         </div>
-                        <input type="file" id="image-upload" onChange={handleFileChange} accept="image/*" className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-900/50 file:text-cyan-300 hover:file:bg-cyan-900/70 transition-colors" />
+                        <div>
+                            <input type="file" id="image-upload" onChange={handleFileChange} accept="image/*" className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-cyan-100 dark:file:bg-cyan-900/50 file:text-cyan-700 dark:file:text-cyan-300 hover:file:bg-cyan-200 dark:hover:file:bg-cyan-900/70 transition-colors" />
+                            {fileError && <p className="text-red-500 dark:text-red-400 text-sm mt-2">{fileError}</p>}
+                        </div>
                         
                         <textarea
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             rows={3}
-                            className="w-full bg-slate-800/60 border border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-200 p-2 transition-colors"
+                            className="w-full bg-gray-50 dark:bg-slate-800/60 border border-gray-300 dark:border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-800 dark:text-gray-200 p-2 transition-colors"
                             placeholder="Ex: Explique este diagrama de arquitetura de nuvem..."
                         />
                     </div>
-                     <button onClick={handleAnalyzeClick} disabled={isLoading || !imageFile || !prompt} className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-2 border border-transparent text-base font-medium rounded-md text-white bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200 shadow-lg hover:shadow-indigo-500/30">
+                     <button onClick={handleAnalyzeClick} disabled={isLoading || !imageFile || !prompt} className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-2 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:text-gray-500 dark:disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200 shadow-lg hover:shadow-indigo-500/30">
                         <SparklesIcon className="w-5 h-5" />
                         Analisar com Gemini
                     </button>
                 </div>
-                <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 shadow-lg">
-                    <h2 className="text-2xl font-bold text-white mb-4">Análise</h2>
-                    <div className="w-full h-full min-h-[300px] bg-slate-800/60 rounded-md p-4 text-gray-300 overflow-y-auto border border-slate-700">
+                <div className="bg-white dark:bg-slate-900/50 backdrop-blur-sm border border-gray-200 dark:border-slate-700/50 rounded-xl p-6 shadow-lg">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Análise</h2>
+                    <div className="w-full h-full min-h-[300px] bg-gray-100 dark:bg-slate-800/60 rounded-md p-4 text-gray-700 dark:text-gray-300 overflow-y-auto border border-gray-300 dark:border-slate-700">
                         {isLoading && <LoadingIndicator message="Analisando..." />}
-                        {error && <p className="text-red-400">{error}</p>}
+                        {error && <p className="text-red-500 dark:text-red-400">{error}</p>}
                         {analysis && <p className="whitespace-pre-wrap">{analysis}</p>}
-                        {!isLoading && !analysis && !error && <p className="text-gray-500">A análise da imagem aparecerá aqui.</p>}
+                        {!isLoading && !analysis && !error && <p className="text-gray-400 dark:text-gray-500">A análise da imagem aparecerá aqui.</p>}
                     </div>
                 </div>
             </div>
