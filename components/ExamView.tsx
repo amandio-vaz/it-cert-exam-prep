@@ -399,8 +399,10 @@ const QuestionNavigator: React.FC<{
 
                     // Classes base
                     let buttonClass = "border border-gray-300 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 cursor-grab";
-                    if (isAnswered) buttonClass = "bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 border-gray-300 dark:border-slate-600 cursor-grab";
-                    if (isCurrent) buttonClass = "bg-cyan-400 border-cyan-400 text-black font-bold cursor-grab";
+                    
+                    if (isCurrent) {
+                        buttonClass = "bg-cyan-400 border-cyan-400 text-black font-bold cursor-grab";
+                    }
                     
                     // Feedback visual aprimorado para arrastar e soltar
                     if (isDragging) {
@@ -427,8 +429,8 @@ const QuestionNavigator: React.FC<{
                             aria-current={isCurrent ? 'page' : undefined}
                         >
                             {i + 1}
-                             {!isAnswered && !isCurrent && (
-                                <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-red-500" title="Não respondida"></span>
+                            {isAnswered && (
+                                <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-green-500" title="Respondida"></span>
                             )}
                         </button>
                     )

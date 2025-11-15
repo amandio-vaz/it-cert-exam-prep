@@ -16,7 +16,7 @@ const Header: React.FC<HeaderProps> = ({ theme, onToggleTheme }) => {
                     <img src={logoBase64} alt="CortexPrepExam Logo" className="w-10 h-10" />
                     <div>
                         <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 tracking-tight">CortexPrepExam</h1>
-                        <p className="text-sm text-gray-500 dark:text-slate-400">Domine sua certificação com simulados gerados por IA.</p>
+                        <p className="text-sm text-gray-500 dark:text-slate-400">Domine sua certificação com simulados gerados por Agentes IA Autônomos.</p>
                     </div>
                 </div>
                 <button

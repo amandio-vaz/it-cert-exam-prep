@@ -108,6 +108,11 @@ const distillFileContent = async (file: UploadedFile, examCode: string, language
         const response = await ai.models.generateContent({
             model: modelName,
             contents,
+            // pt-BR: Limita o tamanho da resposta para garantir um resumo conciso e otimizar custos.
+            config: {
+                maxOutputTokens: 1536,
+                thinkingConfig: { thinkingBudget: 512 },
+            },
         });
         return response.text;
     } catch (error) {
@@ -175,6 +180,9 @@ export const generateExam = async (
     const config = {
         systemInstruction,
         tools: [{ googleSearch: {} }],
+        // pt-BR: Define um limite de tokens dinâmico baseado no número de questões (600 por questão), otimizando custos.
+        maxOutputTokens: questionCount * 600,
+        thinkingConfig: { thinkingBudget: questionCount * 200 },
     };
 
     const response = await ai.models.generateContent({
@@ -234,7 +242,12 @@ export const generateStudyPlan = async (examData: ExamData, userAnswers: UserAns
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
-        config: { tools: [{ googleSearch: {} }] },
+        config: { 
+            tools: [{ googleSearch: {} }],
+            // pt-BR: Limita o tamanho do plano de estudos para garantir que seja detalhado, mas conciso.
+            maxOutputTokens: 3072,
+            thinkingConfig: { thinkingBudget: 1024 },
+        },
     });
     
     return response.text;
@@ -273,6 +286,11 @@ export const analyzeImageWithGemini = async (image: UploadedFile, prompt: string
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, textPart] },
+        // pt-BR: Limita a resposta da análise de imagem para manter a concisão e controlar custos.
+        config: {
+            maxOutputTokens: 2048,
+            thinkingConfig: { thinkingBudget: 1024 },
+        },
     });
 
     return response.text;
