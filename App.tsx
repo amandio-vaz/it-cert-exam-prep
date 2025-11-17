@@ -1,7 +1,7 @@
 
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { AppState, ExamData, Attempt, Question, UserAnswer, UploadedFile } from './types';
+import { AppState, ExamData, Attempt, Question, UserAnswer, UploadedFile, User } from './types';
 import { generateExam, generateStudyPlan, analyzeImageWithGemini } from './services/geminiService';
 
 import Header from './components/Header';
@@ -13,9 +13,11 @@ import ImageAnalyzerView from './components/ImageAnalyzerView';
 import LoadingIndicator from './components/LoadingIndicator';
 import ReviewView from './components/ReviewView';
 import FlashcardView from './components/FlashcardView';
+import LoginView from './components/LoginView';
 
 const App: React.FC = () => {
-    const [appState, setAppState] = useState<AppState>('config');
+    const [appState, setAppState] = useState<AppState>('login');
+    const [user, setUser] = useState<User | null>(null);
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
     const [examCode, setExamCode] = useState<string>('');
     const [extraTopics, setExtraTopics] = useState<string>('');
@@ -59,6 +61,8 @@ const App: React.FC = () => {
 
                 if (savedAppState === 'taking_exam' && savedExamData && savedUserAnswers && savedTimeLeft > 0) {
                     if (window.confirm('Encontramos um exame em andamento. Deseja continuar de onde parou?')) {
+                        // Simula o login para restaurar o estado
+                        setUser({ id: 'mock-user-restored', email: 'restored@session.com'});
                         setExamData(savedExamData);
                         setUserAnswers(savedUserAnswers);
                         setAttempts(savedAttempts || []);
@@ -74,6 +78,21 @@ const App: React.FC = () => {
             }
         }
     }, []);
+
+    // ===== Mock Authentication Handlers =====
+    const handleLogin = (email: string) => {
+        // Mock login: Em um app real, isso faria uma chamada de API.
+        const mockUser: User = { id: `user_${Date.now()}`, email: email };
+        setUser(mockUser);
+        setAppState('config');
+    };
+
+    const handleLogout = () => {
+        setUser(null);
+        returnToConfig();
+        setAppState('login');
+    };
+
 
     const handleStartExam = useCallback(async (language: 'pt-BR' | 'en-US') => {
         if (!examCode || uploadedFiles.length === 0) {
@@ -194,6 +213,8 @@ const App: React.FC = () => {
 
     const renderContent = () => {
         switch (appState) {
+            case 'login':
+                return <LoginView onLogin={handleLogin} />;
             case 'config':
                 return <ConfigView 
                             uploadedFiles={uploadedFiles}
@@ -257,14 +278,19 @@ const App: React.FC = () => {
       return null; // ou um spinner de carregamento inicial
     }
 
+    const showHeader = appState !== 'login';
+
     return (
         <div className="min-h-screen flex flex-col font-sans">
-            {appState !== 'config' && <Header theme={theme} onToggleTheme={toggleTheme} />}
+            {showHeader && user && <Header theme={theme} onToggleTheme={toggleTheme} user={user} onLogout={handleLogout} />}
             <main className="flex-grow container mx-auto p-4 md:p-8 fade-in">
                 {renderContent()}
             </main>
-            <footer className="text-center py-6 text-gray-500 dark:text-gray-500 text-sm fade-in" style={{ animationDelay: '200ms' }}>
-                <p>Desenvolvido com ❤️ por Amândio Vaz - 2025</p>
+            <footer className="py-6 text-gray-500 dark:text-gray-500 text-sm fade-in" style={{ animationDelay: '200ms' }}>
+                <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 px-4">
+                    <p>Desenvolvido com ❤️ por Amândio Vaz - 2025</p>
+                    <p className="font-mono text-xs bg-gray-200/80 dark:bg-slate-800/80 px-2.5 py-1 rounded-full">Release: v1.0</p>
+                </div>
             </footer>
         </div>
     );

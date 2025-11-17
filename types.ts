@@ -1,4 +1,5 @@
 
+
 export enum QuestionType {
   SingleChoice = "Single Choice",
   MultipleChoice = "Multiple Choice",
@@ -51,4 +52,9 @@ export interface Flashcard {
     answer: string;
 }
 
-export type AppState = 'config' | 'generating' | 'taking_exam' | 'results' | 'analyzing_image' | 'generating_study_plan' | 'study_plan' | 'reviewing_exam' | 'viewing_flashcards';
+export interface User {
+    id: string;
+    email: string;
+}
+
+export type AppState = 'login' | 'config' | 'generating' | 'taking_exam' | 'results' | 'analyzing_image' | 'generating_study_plan' | 'study_plan' | 'reviewing_exam' | 'viewing_flashcards';

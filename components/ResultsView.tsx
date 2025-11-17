@@ -1,7 +1,7 @@
-
-import React, { useState } from 'react';
+import React from 'react';
 import { ExamData, UserAnswer, Attempt } from '../types';
 import { CheckCircleIcon, XCircleIcon, BookOpenIcon, ArrowPathIcon, MagnifyingGlassIcon } from './icons';
+import AudioPlayer from './AudioPlayer';
 
 interface ResultsViewProps {
     examData: ExamData;
@@ -55,8 +55,11 @@ const ResultsView: React.FC<ResultsViewProps> = ({ examData, userAnswers, attemp
                             <div key={q.id} className="border-b border-gray-200 dark:border-slate-700 pb-8 last:border-b-0 last:pb-0">
                                 <div className="flex items-start gap-4">
                                     {isCorrect ? <CheckCircleIcon className="w-6 h-6 text-green-500 mt-1 flex-shrink-0" /> : <XCircleIcon className="w-6 h-6 text-red-500 mt-1 flex-shrink-0" />}
-                                    <div>
-                                        <p className="font-semibold text-gray-800 dark:text-white">{index + 1}. {q.text}</p>
+                                    <div className="flex-grow">
+                                        <div className="flex justify-between items-start gap-4">
+                                            <p className="font-semibold text-gray-800 dark:text-white flex-grow">{index + 1}. {q.text}</p>
+                                            <AudioPlayer textToSpeak={`${q.text}. Explicação: ${q.explanation}`} />
+                                        </div>
                                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Domínio: {q.domain}</p>
                                     </div>
                                 </div>
@@ -81,9 +84,12 @@ const ResultsView: React.FC<ResultsViewProps> = ({ examData, userAnswers, attemp
                                         }
 
                                         return (
-                                            <div key={opt.id} className={`p-3 border ${optionStyle} rounded-md text-sm flex justify-between items-center`}>
-                                                <p className="text-gray-700 dark:text-gray-300 flex-grow pr-4">{opt.text}</p>
-                                                {label && <div className="flex-shrink-0">{label}</div>}
+                                            <div key={opt.id} className={`p-3 border ${optionStyle} rounded-md text-sm flex justify-between items-center gap-4`}>
+                                                <p className="text-gray-700 dark:text-gray-300 flex-grow">{opt.text}</p>
+                                                <div className="flex items-center gap-4 flex-shrink-0">
+                                                    {label && <div>{label}</div>}
+                                                    <AudioPlayer textToSpeak={opt.text} />
+                                                </div>
                                             </div>
                                         );
                                     })}

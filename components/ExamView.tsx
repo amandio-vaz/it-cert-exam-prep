@@ -1,10 +1,8 @@
-
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
-import { generateSpeech } from '../services/geminiService';
-import { decode, decodeAudioData } from '../utils/audioUtils';
-import { PlayIcon, PauseIcon, ClockIcon, Squares2X2Icon, SquaresPlusIcon, XMarkIcon, SpeakerWaveIcon } from './icons';
+import { generateQuestionTitle } from '../services/geminiService';
+import AudioPlayer from './AudioPlayer';
+import { ClockIcon, Squares2X2Icon, SquaresPlusIcon, XMarkIcon, BookOpenIcon, MagnifyingGlassIcon } from './icons';
 
 interface ExamViewProps {
     examData: ExamData;
@@ -14,187 +12,15 @@ interface ExamViewProps {
     attempts: Attempt[];
 }
 
-// Player de áudio aprimorado, definido dentro do ExamView para simplicidade.
-const AudioPlayer: React.FC<{ textToSpeak: string }> = ({ textToSpeak }) => {
-    type AudioState = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
-
-    const [audioState, setAudioState] = useState<AudioState>('idle');
-    const [progress, setProgress] = useState(0);
-    const [duration, setDuration] = useState(0);
-    const [currentTime, setCurrentTime] = useState(0);
-
-    // Usamos refs para armazenar objetos que não devem disparar re-renderizações ao serem alterados.
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const audioBufferRef = useRef<AudioBuffer | null>(null);
-    const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-    const startTimeRef = useRef(0);
-    const pauseTimeRef = useRef(0);
-    const animationFrameRef = useRef(0);
-
-    const cleanup = () => {
-        // Para a animação e o áudio.
-        cancelAnimationFrame(animationFrameRef.current);
-        sourceNodeRef.current?.stop();
-        sourceNodeRef.current?.disconnect();
-        // Não fechamos o context para permitir múltiplos plays
-    };
-    
-    // Efeito para limpar ao desmontar o componente (ex: mudar de questão)
-    useEffect(() => {
-        return () => {
-            cleanup();
-            audioContextRef.current?.close();
-        }
-    }, []);
-
-    const formatTime = (seconds: number) => {
-        const floorSeconds = Math.floor(seconds);
-        const min = Math.floor(floorSeconds / 60);
-        const sec = floorSeconds % 60;
-        return `${min}:${sec.toString().padStart(2, '0')}`;
-    };
-
-    const updateProgress = useCallback(() => {
-        if (audioContextRef.current && audioState === 'playing') {
-            const elapsed = audioContextRef.current.currentTime - startTimeRef.current + pauseTimeRef.current;
-            if (elapsed < duration) {
-                setCurrentTime(elapsed);
-                setProgress(elapsed / duration);
-                animationFrameRef.current = requestAnimationFrame(updateProgress);
-            } else {
-                // O áudio terminou
-                cleanup();
-                setAudioState('idle');
-                setProgress(1);
-                setCurrentTime(duration);
-            }
-        }
-    }, [audioState, duration]);
-
-    const playAudio = useCallback((buffer: AudioBuffer, offset = 0) => {
-        if (!audioContextRef.current) return;
-        
-        cleanup(); // Limpa qualquer áudio anterior
-
-        const source = audioContextRef.current.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContextRef.current.destination);
-        source.start(0, offset);
-
-        sourceNodeRef.current = source;
-        startTimeRef.current = audioContextRef.current.currentTime;
-        pauseTimeRef.current = offset; // Retomamos do ponto de pausa
-        
-        setAudioState('playing');
-        animationFrameRef.current = requestAnimationFrame(updateProgress);
-
-        source.onended = () => {
-             // Garante que o estado seja resetado se o áudio terminar por conta própria
-             if (progress >= 0.99) {
-                setAudioState('idle');
-                setCurrentTime(duration);
-                setProgress(1);
-             }
-        };
-
-    }, [updateProgress, duration, progress]);
-
-    const togglePlayPause = async () => {
-        // Inicializa o AudioContext no primeiro clique
-        if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-        }
-        // Garante que o contexto de áudio seja retomado (necessário em alguns navegadores)
-        if (audioContextRef.current.state === 'suspended') {
-            await audioContextRef.current.resume();
-        }
-
-        if (audioState === 'playing') {
-            // Pausa
-            pauseTimeRef.current += audioContextRef.current.currentTime - startTimeRef.current;
-            audioContextRef.current.suspend();
-            cancelAnimationFrame(animationFrameRef.current);
-            setAudioState('paused');
-        } else if (audioState === 'paused') {
-            // Retoma
-            await audioContextRef.current.resume();
-            startTimeRef.current = audioContextRef.current.currentTime;
-            setAudioState('playing');
-            animationFrameRef.current = requestAnimationFrame(updateProgress);
-        } else if (audioState === 'idle') {
-            // Se já temos o áudio, apenas toca de novo
-            if (audioBufferRef.current) {
-                playAudio(audioBufferRef.current);
-            } else {
-                 // Busca e toca o áudio pela primeira vez
-                try {
-                    setAudioState('loading');
-                    const base64Audio = await generateSpeech(textToSpeak);
-                    const audioBuffer = await decodeAudioData(decode(base64Audio), audioContextRef.current, 24000, 1);
-                    audioBufferRef.current = audioBuffer;
-                    setDuration(audioBuffer.duration);
-                    playAudio(audioBuffer);
-                } catch (error) {
-                    console.error("Failed to play audio", error);
-                    setAudioState('error');
-                }
-            }
-        }
-    };
-    
-    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!audioBufferRef.current || !audioContextRef.current) return;
-        const newProgress = parseFloat(e.target.value);
-        const newTime = duration * newProgress;
-
-        setProgress(newProgress);
-        setCurrentTime(newTime);
-        
-        // Se estiver tocando ou pausado, reinicia a reprodução do novo ponto
-        if (audioState === 'playing' || audioState === 'paused') {
-            playAudio(audioBufferRef.current, newTime);
-        }
-    };
-
-    return (
-        <div className="flex items-center gap-3 w-full bg-gray-100 dark:bg-slate-800/70 p-2 rounded-lg border border-gray-200 dark:border-slate-700/50">
-            <button
-                onClick={togglePlayPause}
-                className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-cyan-400 text-black hover:bg-cyan-300 transition-colors disabled:bg-gray-300 dark:disabled:bg-slate-600"
-                disabled={audioState === 'loading'}
-                aria-label={audioState === 'playing' ? 'Pausar áudio' : 'Reproduzir áudio'}
-            >
-                {audioState === 'loading' && <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>}
-                {audioState === 'playing' && <PauseIcon className="w-5 h-5" />}
-                {(audioState === 'idle' || audioState === 'paused' || audioState === 'error') && <PlayIcon className="w-5 h-5" />}
-            </button>
-            <div className="flex-grow flex items-center gap-2">
-                 <span className="font-mono text-xs text-gray-600 dark:text-gray-400">{formatTime(currentTime)}</span>
-                 <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={progress}
-                    onChange={handleSeek}
-                    className="w-full h-1.5 bg-gray-300 dark:bg-slate-600 rounded-full appearance-none cursor-pointer accent-cyan-500"
-                    disabled={audioState === 'idle' || audioState === 'loading'}
-                />
-                 <span className="font-mono text-xs text-gray-600 dark:text-gray-400">{formatTime(duration)}</span>
-            </div>
-            {audioState === 'error' && <p className="text-xs text-red-500">Erro</p>}
-        </div>
-    );
-};
-
-
 const QuestionCard: React.FC<{
     question: Question;
     userAnswer: string[];
     onAnswerChange: (answer: string[]) => void;
     questionNumber: number;
     totalQuestions: number;
-}> = ({ question, userAnswer, onAnswerChange, questionNumber, totalQuestions }) => {
+    title: string;
+    isTitleLoading: boolean;
+}> = ({ question, userAnswer, onAnswerChange, questionNumber, totalQuestions, title, isTitleLoading }) => {
 
     const handleSingleChoiceChange = (optionId: string) => {
         onAnswerChange([optionId]);
@@ -214,35 +40,40 @@ const QuestionCard: React.FC<{
                    <p className="text-sm text-cyan-500 dark:text-cyan-400 font-semibold">{question.domain}</p>
                    <p className="text-sm text-gray-500 dark:text-gray-400">Questão {questionNumber} de {totalQuestions}</p>
                 </div>
-                 <div className="w-6 h-6 text-cyan-500 dark:text-cyan-400">
-                     <SpeakerWaveIcon />
-                 </div>
+                <AudioPlayer textToSpeak={question.scenario ? `${question.scenario}. ${question.text}` : question.text} />
             </div>
+
+            {isTitleLoading ? (
+                <div className="h-8 w-3/4 bg-gray-200 dark:bg-slate-700 rounded-md animate-pulse mb-4"></div>
+            ) : (
+                title && <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">{title}</h3>
+            )}
             
             {question.scenario && <div className="mb-4 p-4 bg-gray-100 dark:bg-slate-800/70 border border-gray-200 dark:border-slate-600/50 rounded-md text-gray-700 dark:text-gray-300 italic"><p>{question.scenario}</p></div>}
             
             <p className="text-lg text-gray-800 dark:text-white mb-4">{question.text}</p>
             
-             <AudioPlayer textToSpeak={question.scenario ? `${question.scenario}. ${question.text}` : question.text} />
-
-            <div className="space-y-4 mt-6 flex-grow">
+            <div className="space-y-4 mt-2 flex-grow">
                 {question.options.map(option => {
                     const isChecked = userAnswer.includes(option.id);
                     const isMulti = question.type === QuestionType.MultipleChoice;
                     const inputType = isMulti ? 'checkbox' : 'radio';
 
                     return (
-                        <label key={option.id} className={`flex items-center p-4 border rounded-lg cursor-pointer transition-all duration-200 ${isChecked ? 'bg-cyan-500/10 border-cyan-500 ring-2 ring-cyan-500/20' : 'bg-gray-50 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700/80 hover:border-gray-400 dark:hover:border-slate-500'}`}>
-                            <input
-                                type={inputType}
-                                name={question.id}
-                                value={option.id}
-                                checked={isChecked}
-                                onChange={() => isMulti ? handleMultiChoiceChange(option.id) : handleSingleChoiceChange(option.id)}
-                                className={`h-5 w-5 ${isMulti ? 'rounded' : 'rounded-full'} text-cyan-600 dark:text-cyan-500 bg-white dark:bg-slate-900 border-gray-400 dark:border-slate-600 focus:ring-cyan-500 focus:ring-offset-white dark:focus:ring-offset-slate-900`}
-                            />
-                            <span className="ml-4 text-gray-700 dark:text-gray-200">{option.text}</span>
-                        </label>
+                        <div key={option.id} className={`flex items-center p-4 border rounded-lg transition-all duration-200 ${isChecked ? 'bg-cyan-500/10 border-cyan-500 ring-2 ring-cyan-500/20' : 'bg-gray-50 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 hover:border-gray-400 dark:hover:border-slate-500'}`}>
+                            <label className="flex items-center cursor-pointer flex-grow">
+                                <input
+                                    type={inputType}
+                                    name={question.id}
+                                    value={option.id}
+                                    checked={isChecked}
+                                    onChange={() => isMulti ? handleMultiChoiceChange(option.id) : handleSingleChoiceChange(option.id)}
+                                    className={`h-5 w-5 ${isMulti ? 'rounded' : 'rounded-full'} text-cyan-600 dark:text-cyan-500 bg-white dark:bg-slate-900 border-gray-400 dark:border-slate-600 focus:ring-cyan-500 focus:ring-offset-white dark:focus:ring-offset-slate-900`}
+                                />
+                                <span className="ml-4 text-gray-700 dark:text-gray-200">{option.text}</span>
+                            </label>
+                            <AudioPlayer textToSpeak={option.text} />
+                        </div>
                     );
                 })}
             </div>
@@ -356,27 +187,47 @@ const QuestionNavigator: React.FC<{
     onOpenJumpModal: () => void;
     onReorder: (dragIndex: number, dropIndex: number) => void;
 }> = ({ questions, current, answered, onJump, onOpenJumpModal, onReorder }) => {
+    const [searchQuery, setSearchQuery] = useState('');
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+    const filteredQuestions = useMemo(() => {
+        if (!searchQuery.trim()) {
+            return questions.map((q, index) => ({ question: q, originalIndex: index }));
+        }
+        return questions
+            .map((q, index) => ({ question: q, originalIndex: index }))
+            .filter(({ question }) => 
+                question.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (question.scenario && question.scenario.toLowerCase().includes(searchQuery.toLowerCase()))
+            );
+    }, [questions, searchQuery]);
+
+    const isSearchActive = searchQuery.trim() !== '';
+
+
     const handleDragStart = (e: React.DragEvent<HTMLButtonElement>, index: number) => {
+        if (isSearchActive) {
+            e.preventDefault();
+            return;
+        }
         e.dataTransfer.setData('text/plain', index.toString());
-        // Timeout permite que o navegador capture a aparência do elemento antes de o alterarmos
         setTimeout(() => setDraggingIndex(index), 0);
     };
 
     const handleDragOver = (e: React.DragEvent<HTMLButtonElement>) => {
-        e.preventDefault(); // Necessário para permitir o drop
+        e.preventDefault();
     };
 
     const handleDrop = (e: React.DragEvent<HTMLButtonElement>, dropIndex: number) => {
         e.preventDefault();
+        if (isSearchActive) return;
+
         const dragIndexStr = e.dataTransfer.getData('text/plain');
         if (dragIndexStr) {
             const dragIndex = parseInt(dragIndexStr, 10);
             onReorder(dragIndex, dropIndex);
         }
-        // A limpeza agora ocorre no onDragEnd para lidar com drops fora de um alvo válido
     };
     
     const handleDragEnd = () => {
@@ -390,45 +241,53 @@ const QuestionNavigator: React.FC<{
                 <Squares2X2Icon className="w-5 h-5 text-cyan-500 dark:text-cyan-400" />
                 Navegação do Exame
             </h3>
+             <div className="relative mb-4">
+                <input 
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filtrar questões..."
+                    className="w-full pl-8 pr-2 py-1.5 text-sm bg-gray-100 dark:bg-slate-800/60 border border-gray-300 dark:border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-800 dark:text-gray-200 transition-colors"
+                />
+                 <MagnifyingGlassIcon className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none" />
+            </div>
             <div className="grid grid-cols-5 gap-2">
-                {questions.map((question, i) => {
+                {filteredQuestions.map(({ question, originalIndex }) => {
                     const isAnswered = answered.includes(question.id);
-                    const isCurrent = i === current;
-                    const isDragging = draggingIndex === i;
-                    const isDragOver = dragOverIndex === i && draggingIndex !== i;
+                    const isCurrent = originalIndex === current;
+                    const isDragging = draggingIndex === originalIndex;
+                    const isDragOver = dragOverIndex === originalIndex && draggingIndex !== originalIndex;
 
-                    // Classes base
-                    let buttonClass = "border border-gray-300 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 cursor-grab";
+                    let buttonClass = `border border-gray-300 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 ${isSearchActive ? 'cursor-pointer' : 'cursor-grab'}`;
                     
                     if (isCurrent) {
-                        buttonClass = "bg-cyan-400 border-cyan-400 text-black font-bold cursor-grab";
+                        buttonClass = `bg-cyan-400 border-cyan-400 text-black font-bold ${isSearchActive ? 'cursor-pointer' : 'cursor-grab'}`;
                     }
                     
-                    // Feedback visual aprimorado para arrastar e soltar
-                    if (isDragging) {
-                        // Estilo para o item que está sendo arrastado: fica semi-transparente e "flutua"
-                        buttonClass += " opacity-50 scale-105 rotate-3 cursor-grabbing";
-                    } else if (isDragOver) {
-                        // Estilo para o placeholder/alvo de soltura: um destaque sólido e proeminente.
-                        buttonClass = "scale-110 bg-cyan-500/20 border-2 border-solid border-cyan-400 ring-2 ring-cyan-400 ring-offset-2 dark:ring-offset-slate-900";
+                    if (!isSearchActive) {
+                        if (isDragging) {
+                            buttonClass += " opacity-50 scale-105 rotate-3 cursor-grabbing";
+                        } else if (isDragOver) {
+                            buttonClass = "scale-110 bg-cyan-500/20 border-2 border-solid border-cyan-400 ring-2 ring-cyan-400 ring-offset-2 dark:ring-offset-slate-900";
+                        }
                     }
 
                     return (
                         <button 
                             key={question.id} 
-                            onClick={() => onJump(i)}
-                            draggable="true"
-                            onDragStart={(e) => handleDragStart(e, i)}
-                            onDragEnter={() => setDragOverIndex(i)}
+                            onClick={() => onJump(originalIndex)}
+                            draggable={!isSearchActive}
+                            onDragStart={(e) => handleDragStart(e, originalIndex)}
+                            onDragEnter={() => setDragOverIndex(originalIndex)}
                             onDragLeave={() => setDragOverIndex(null)}
                             onDragOver={handleDragOver}
-                            onDrop={(e) => handleDrop(e, i)}
+                            onDrop={(e) => handleDrop(e, originalIndex)}
                             onDragEnd={handleDragEnd}
                             className={`relative flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm ${buttonClass}`}
-                            aria-label={`Ir para a questão ${i + 1}`}
+                            aria-label={`Ir para a questão ${originalIndex + 1}`}
                             aria-current={isCurrent ? 'page' : undefined}
                         >
-                            {i + 1}
+                            {originalIndex + 1}
                             {isAnswered && (
                                 <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-green-500" title="Respondida"></span>
                             )}
@@ -454,13 +313,18 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
     const [answers, setAnswers] = useState<UserAnswer>(initialAnswers);
     const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
     const [animationClass, setAnimationClass] = useState('opacity-100');
+    const [isReadingMode, setIsReadingMode] = useState(false);
+    const [currentQuestionTitle, setCurrentQuestionTitle] = useState('');
+    const [isTitleLoading, setIsTitleLoading] = useState(false);
+    
+    const titleCache = useRef<Map<string, string>>(new Map());
+    const isMountedRef = useRef(true);
     
     const [orderedQuestions, setOrderedQuestions] = useState<Question[]>(() => {
         const savedProgressRaw = localStorage.getItem('cortexExamProgress');
         if (savedProgressRaw) {
             try {
                 const savedProgress = JSON.parse(savedProgressRaw);
-                // Verifica se a ordem salva corresponde ao exame atual
                 if (savedProgress.examData?.examCode === examData.examCode && savedProgress.orderedQuestionIds) {
                     const idOrder: string[] = savedProgress.orderedQuestionIds;
                     const questionMap = new Map(examData.questions.map(q => [q.id, q]));
@@ -485,9 +349,46 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
     
     const answersRef = useRef(answers);
     answersRef.current = answers;
+    
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
 
     useEffect(() => {
-        // Não salva se o tempo acabou, pois o exame terminou.
+        const generateTitle = async () => {
+            const currentQuestion = orderedQuestions[currentQuestionIndex];
+            if (!currentQuestion) return;
+
+            const questionId = currentQuestion.id;
+            if (titleCache.current.has(questionId)) {
+                setCurrentQuestionTitle(titleCache.current.get(questionId)!);
+                return;
+            }
+
+            setIsTitleLoading(true);
+            setCurrentQuestionTitle(''); 
+            try {
+                const fullText = currentQuestion.scenario ? `${currentQuestion.scenario}\n${currentQuestion.text}` : currentQuestion.text;
+                const newTitle = await generateQuestionTitle(fullText);
+                titleCache.current.set(questionId, newTitle);
+                if (isMountedRef.current) {
+                    setCurrentQuestionTitle(newTitle);
+                }
+            } catch (e) {
+                console.error("Falha ao gerar o título da questão", e);
+            } finally {
+                if (isMountedRef.current) {
+                    setIsTitleLoading(false);
+                }
+            }
+        };
+
+        generateTitle();
+    }, [currentQuestionIndex, orderedQuestions]);
+
+
+    useEffect(() => {
         if (timeLeft <= 0) return;
 
         const progressToSave = {
@@ -525,9 +426,10 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
     };
 
     useEffect(() => {
+        if (isReadingMode) return; 
+
         const timer = setInterval(() => {
             setTimeLeft(prevTime => {
-                // Toca sons de aviso em 2 minutos, 1 minuto e 30 segundos
                 if (prevTime === 121 || prevTime === 61 || prevTime === 31) {
                     playWarningSound();
                 }
@@ -541,7 +443,7 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [onFinishExam]);
+    }, [onFinishExam, isReadingMode]);
     
     const formatTime = (seconds: number) => {
         const minutes = Math.floor(seconds / 60);
@@ -566,12 +468,12 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
     const navigateToQuestionWithAnimation = (index: number) => {
         if (index < 0 || index >= orderedQuestions.length || index === currentQuestionIndex) return;
 
-        setAnimationClass('opacity-0'); // Inicia o fade-out
+        setAnimationClass('opacity-0'); 
 
         setTimeout(() => {
             setCurrentQuestionIndex(index);
-            setAnimationClass('opacity-100'); // Inicia o fade-in para a nova questão
-        }, 200); // Duração da animação de fade-out
+            setAnimationClass('opacity-100'); 
+        }, 200); 
     };
 
     const handleJumpToQuestion = (index: number) => {
@@ -602,7 +504,6 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
         
         setOrderedQuestions(newOrderedQuestions);
         
-        // Atualiza o índice atual para manter a mesma questão na tela
         const newCurrentIndex = newOrderedQuestions.findIndex(q => q.id === currentQuestionId);
         if (newCurrentIndex !== -1) {
             setCurrentQuestionIndex(newCurrentIndex);
@@ -621,18 +522,33 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{examData.examName}</h1>
                             <h2 className="text-lg text-gray-500 dark:text-gray-400">{examData.examCode}</h2>
                         </div>
-                        <div className={`flex items-center gap-2 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border px-3 py-1.5 rounded-lg transition-colors duration-500 ${getTimerClasses()}`}>
-                            <ClockIcon className="w-5 h-5" />
-                            <span className="font-mono text-lg font-semibold">{formatTime(timeLeft)}</span>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setIsReadingMode(!isReadingMode)}
+                                className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-800 transition-colors"
+                                aria-label={isReadingMode ? "Sair do Modo de Leitura" : "Entrar no Modo de Leitura"}
+                                title={isReadingMode ? "Sair do Modo de Leitura" : "Entrar no Modo de Leitura"}
+                            >
+                                <BookOpenIcon className={`w-6 h-6 ${isReadingMode ? 'text-cyan-400' : ''}`} />
+                            </button>
+
+                            {!isReadingMode && (
+                                <div className={`flex items-center gap-2 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border px-3 py-1.5 rounded-lg transition-colors duration-500 ${getTimerClasses()}`}>
+                                    <ClockIcon className="w-5 h-5" />
+                                    <span className="font-mono text-lg font-semibold">{formatTime(timeLeft)}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2.5">
-                        <div className="bg-cyan-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
-                    </div>
+                    {!isReadingMode && (
+                        <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2.5">
+                            <div className="bg-cyan-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
+                        </div>
+                    )}
                 </div>
 
-                <div className="w-full max-w-7xl grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="md:col-span-2 flex flex-col gap-6">
+                <div className={`w-full max-w-7xl grid grid-cols-1 ${!isReadingMode && 'md:grid-cols-3'} gap-8`}>
+                    <div className={`flex flex-col gap-6 ${!isReadingMode ? 'md:col-span-2' : 'col-span-1'}`}>
                         <div className={`transition-opacity duration-200 ease-in-out ${animationClass}`}>
                              {currentQuestion && <QuestionCard
                                 key={currentQuestion.id}
@@ -641,34 +557,40 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                                 onAnswerChange={handleAnswerChange}
                                 questionNumber={currentQuestionIndex + 1}
                                 totalQuestions={orderedQuestions.length}
+                                title={currentQuestionTitle}
+                                isTitleLoading={isTitleLoading}
                             />}
                         </div>
 
-                        <div className="flex justify-between w-full">
-                            <button onClick={goToPrev} disabled={currentQuestionIndex === 0} className="px-6 py-2 border border-gray-300 dark:border-slate-600 text-base font-medium rounded-md text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                                Anterior
-                            </button>
-                            {currentQuestionIndex < orderedQuestions.length - 1 ? (
-                                <button onClick={goToNext} className="px-6 py-2 border border-transparent text-base font-bold rounded-md text-black bg-cyan-400 hover:bg-cyan-300 transition-colors shadow-lg hover:shadow-cyan-400/20">
-                                    Próxima
+                         {!isReadingMode && (
+                            <div className="flex justify-between w-full">
+                                <button onClick={goToPrev} disabled={currentQuestionIndex === 0} className="px-6 py-2 border border-gray-300 dark:border-slate-600 text-base font-medium rounded-md text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                    Anterior
                                 </button>
-                            ) : (
-                                <button onClick={() => onFinishExam(answers)} className="px-6 py-2 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors shadow-lg hover:shadow-green-600/30">
-                                    Finalizar Exame
-                                </button>
-                            )}
+                                {currentQuestionIndex < orderedQuestions.length - 1 ? (
+                                    <button onClick={goToNext} className="px-6 py-2 border border-transparent text-base font-bold rounded-md text-black bg-cyan-400 hover:bg-cyan-300 transition-colors shadow-lg hover:shadow-cyan-400/20">
+                                        Próxima
+                                    </button>
+                                ) : (
+                                    <button onClick={() => onFinishExam(answers)} className="px-6 py-2 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors shadow-lg hover:shadow-green-600/30">
+                                        Finalizar Exame
+                                    </button>
+                                )}
+                            </div>
+                         )}
+                    </div>
+                    {!isReadingMode && (
+                        <div className="md:col-span-1">
+                            <QuestionNavigator 
+                                questions={orderedQuestions}
+                                current={currentQuestionIndex}
+                                answered={Object.keys(answers).filter(key => answers[key] && answers[key].length > 0)}
+                                onJump={handleJumpToQuestion}
+                                onOpenJumpModal={() => setIsJumpModalOpen(true)}
+                                onReorder={handleReorder}
+                            />
                         </div>
-                    </div>
-                    <div className="md:col-span-1">
-                        <QuestionNavigator 
-                            questions={orderedQuestions}
-                            current={currentQuestionIndex}
-                            answered={Object.keys(answers).filter(key => answers[key] && answers[key].length > 0)}
-                            onJump={handleJumpToQuestion}
-                            onOpenJumpModal={() => setIsJumpModalOpen(true)}
-                            onReorder={handleReorder}
-                        />
-                    </div>
+                    )}
                 </div>
             </div>
             <QuestionJumpModal

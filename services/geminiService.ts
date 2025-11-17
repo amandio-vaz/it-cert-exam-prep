@@ -114,7 +114,7 @@ const distillFileContent = async (file: UploadedFile, examCode: string, language
                 thinkingConfig: { thinkingBudget: 512 },
             },
         });
-        return response.text;
+        return response.text || '';
     } catch (error) {
         console.error(`Falha ao resumir o arquivo ${file.name}:`, error);
         // Retorna uma mensagem de erro para que o usuário saiba que um arquivo falhou, mas não quebra o processo.
@@ -191,7 +191,7 @@ export const generateExam = async (
         config
     });
 
-    let jsonText = response.text.trim();
+    let jsonText = (response.text || '').trim();
     
     // Tenta extrair o JSON de um bloco de código markdown, se existir.
     const markdownJsonRegex = /```json\s*([\s\S]*?)\s*```/;
@@ -250,7 +250,7 @@ export const generateStudyPlan = async (examData: ExamData, userAnswers: UserAns
         },
     });
     
-    return response.text;
+    return response.text || '';
 };
 
 export const generateSpeech = async (text: string): Promise<string> => {
@@ -293,5 +293,20 @@ export const analyzeImageWithGemini = async (image: UploadedFile, prompt: string
         },
     });
 
-    return response.text;
+    return response.text || '';
+};
+
+export const generateQuestionTitle = async (questionText: string): Promise<string> => {
+    const prompt = `Gere um título curto e conciso (máximo 5 palavras) que resuma a seguinte questão de certificação de TI. O título deve capturar o conceito principal testado. Retorne apenas o texto do título, sem formatação extra ou explicação. Questão: "${questionText}"`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            maxOutputTokens: 50, // Limite baixo para uma resposta rápida e curta
+            temperature: 0.2, // Baixa temperatura para um título mais focado e menos criativo
+        },
+    });
+
+    return (response.text || '').trim();
 };

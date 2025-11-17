@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Question, UserAnswer } from '../types';
 import { ArrowLeftIcon, CheckCircleIcon, XCircleIcon, ClipboardDocumentListIcon } from './icons';
+import AudioPlayer from './AudioPlayer';
 
 interface ReviewViewProps {
     questions: Question[];
@@ -103,22 +104,25 @@ const ReviewView: React.FC<ReviewViewProps> = ({ questions, userAnswers, onBackT
                         <p className="text-sm text-cyan-600 dark:text-cyan-400 font-semibold">{question.domain}</p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">Revisando questão {currentIndex + 1} de {questions.length}</p>
                     </div>
-                    {isCorrect ? (
-                        <span className="flex items-center gap-1.5 text-sm bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 px-3 py-1 rounded-full border border-green-200 dark:border-green-500/30 font-semibold">
-                            <CheckCircleIcon className="w-4 h-4" />
-                            Correta
-                        </span>
-                    ) : (
-                        <span className="flex items-center gap-1.5 text-sm bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 px-3 py-1 rounded-full border border-red-200 dark:border-red-500/30 font-semibold">
-                            <XCircleIcon className="w-4 h-4" />
-                            Incorreta
-                        </span>
-                    )}
+                    <div className="flex items-center gap-4">
+                        {isCorrect ? (
+                            <span className="flex items-center gap-1.5 text-sm bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 px-3 py-1 rounded-full border border-green-200 dark:border-green-500/30 font-semibold">
+                                <CheckCircleIcon className="w-4 h-4" />
+                                Correta
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-1.5 text-sm bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 px-3 py-1 rounded-full border border-red-200 dark:border-red-500/30 font-semibold">
+                                <XCircleIcon className="w-4 h-4" />
+                                Incorreta
+                            </span>
+                        )}
+                         <AudioPlayer textToSpeak={question.scenario ? `${question.scenario}. ${question.text}` : question.text} />
+                    </div>
                 </div>
 
                 {question.scenario && <div className="mb-4 p-4 bg-gray-100 dark:bg-slate-800/70 border border-gray-200 dark:border-slate-600/50 rounded-md text-gray-700 dark:text-gray-300 italic"><p>{question.scenario}</p></div>}
                 
-                <p className="text-lg text-gray-800 dark:text-white mb-6">{question.text}</p>
+                <p className="text-lg text-gray-800 dark:text-white mb-4">{question.text}</p>
                 
                 <div className="space-y-3">
                     {question.options.map(opt => {
@@ -137,9 +141,12 @@ const ReviewView: React.FC<ReviewViewProps> = ({ questions, userAnswers, onBackT
                         }
 
                         return (
-                            <div key={opt.id} className={`flex items-center gap-4 p-4 border rounded-lg ${styles}`}>
-                                {icon ? icon : <div className="w-5 h-5 flex-shrink-0"></div>}
-                                <span className="text-gray-700 dark:text-gray-200">{opt.text}</span>
+                            <div key={opt.id} className={`flex items-center justify-between gap-4 p-4 border rounded-lg ${styles}`}>
+                                <div className="flex items-center gap-4 flex-grow mr-4">
+                                    {icon ? icon : <div className="w-5 h-5 flex-shrink-0"></div>}
+                                    <span className="text-gray-700 dark:text-gray-200">{opt.text}</span>
+                                </div>
+                                <AudioPlayer textToSpeak={opt.text} />
                             </div>
                         );
                     })}
