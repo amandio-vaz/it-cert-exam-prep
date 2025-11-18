@@ -1,11 +1,9 @@
 
 
-
-
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
-import { UploadedFile } from '../types';
+import { UploadedFile, Attempt } from '../types';
 import { fileToBase64, fileToArrayBuffer, uint8ArrayToBase64 } from '../utils/fileUtils';
-import { CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon } from './icons';
+import { CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon, ChartBarIcon, PhotoIcon } from './icons';
 import { PDFDocument } from 'pdf-lib';
 import { ALL_EXAM_CODES, POPULAR_EXAMS } from '../data/examCodes';
 
@@ -20,6 +18,9 @@ interface ConfigViewProps {
     setQuestionCount: (count: number) => void;
     onStartExam: (language: 'pt-BR' | 'en-US') => void;
     onViewFlashcards: () => void;
+    onViewAttemptHistory: () => void; // New prop for viewing attempt history
+    onViewImageAnalyzer: () => void; // New prop for image analyzer
+    attempts: Attempt[]; // New prop to check if history exists
     error: string | null;
 }
 
@@ -57,6 +58,9 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     setQuestionCount,
     onStartExam,
     onViewFlashcards,
+    onViewAttemptHistory, // Destructure new prop
+    onViewImageAnalyzer, // Destructure new prop
+    attempts, // Destructure new prop
     error
 }) => {
     const [isDragging, setIsDragging] = useState(false);
@@ -308,13 +312,24 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                         </div>
                      )}
                      {uploadedFiles.length > 0 && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {uploadedFiles.map((file, index) => (
-                                <div key={index} className="flex items-center justify-between bg-slate-800/50 p-2 rounded-md text-sm">
-                                    <p className="truncate text-gray-300 pr-2">{file.name}</p>
-                                    <button onClick={() => setUploadedFiles(files => files.filter((_, i) => i !== index))} className="text-red-400 hover:text-red-300 font-bold text-lg px-2 flex-shrink-0">&times;</button>
-                                </div>
-                            ))}
+                        <div className="mt-4 flex flex-col gap-2">
+                            <div className="text-sm text-gray-400 dark:text-gray-500">
+                                {uploadedFiles.length} de {MAX_FILES} arquivos carregados
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
+                                <div 
+                                    className="bg-violet-500 h-2 rounded-full transition-all duration-300" 
+                                    style={{ width: `${(uploadedFiles.length / MAX_FILES) * 100}%` }}
+                                ></div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {uploadedFiles.map((file, index) => (
+                                    <div key={index} className="flex items-center justify-between bg-slate-800/50 p-2 rounded-md text-sm">
+                                        <p className="truncate text-gray-300 pr-2">{file.name}</p>
+                                        <button onClick={() => setUploadedFiles(files => files.filter((_, i) => i !== index))} className="text-red-400 hover:text-red-300 font-bold text-lg px-2 flex-shrink-0">&times;</button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -443,17 +458,39 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                     </button>
                 </div>
             </div>
-            {hasFlashcards && (
-                <div className="text-center mt-8">
-                    <button 
-                        onClick={onViewFlashcards} 
-                        className="inline-flex items-center justify-center gap-3 px-6 py-3 border border-slate-700/80 text-base font-medium rounded-xl text-gray-300 hover:bg-slate-800/50 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-cyan-500 transition-all duration-200"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+                {hasFlashcards && (
+                    <div className="text-center">
+                        <button 
+                            onClick={onViewFlashcards} 
+                            className="inline-flex items-center justify-center gap-3 px-6 py-3 border border-slate-700/80 text-base font-medium rounded-xl text-gray-300 hover:bg-slate-800/50 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-cyan-500 transition-all duration-200 w-full"
+                        >
+                            <RectangleStackIcon className="w-5 h-5" />
+                            Revisar Flashcards Salvos
+                        </button>
+                    </div>
+                )}
+                {attempts.length > 0 && (
+                    <div className="text-center">
+                        <button 
+                            onClick={onViewAttemptHistory} 
+                            className="inline-flex items-center justify-center gap-3 px-6 py-3 border border-slate-700/80 text-base font-medium rounded-xl text-gray-300 hover:bg-slate-800/50 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-violet-500 transition-all duration-200 w-full"
+                        >
+                            <ChartBarIcon className="w-5 h-5" />
+                            Ver Histórico de Exames
+                        </button>
+                    </div>
+                )}
+                <div className="text-center md:col-span-2">
+                    <button
+                        onClick={onViewImageAnalyzer}
+                        className="inline-flex items-center justify-center gap-3 px-6 py-3 border border-slate-700/80 text-base font-medium rounded-xl text-gray-300 hover:bg-slate-800/50 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-orange-500 transition-all duration-200 w-full"
                     >
-                        <RectangleStackIcon className="w-5 h-5" />
-                        Revisar Flashcards Salvos
+                        <PhotoIcon className="w-5 h-5" />
+                        Analisar Imagem com IA
                     </button>
                 </div>
-            )}
+            </div>
         </div>
     );
 };

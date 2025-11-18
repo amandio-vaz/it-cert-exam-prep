@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
 import { generateQuestionTitle } from '../services/geminiService';
@@ -9,7 +10,7 @@ interface ExamViewProps {
     onFinishExam: (answers: UserAnswer) => void;
     initialAnswers?: UserAnswer;
     initialTimeLeft?: number | null;
-    attempts: Attempt[];
+    attempts: Attempt[]; // Adicionado: histórico de tentativas para salvar no progresso
 }
 
 const getQuestionTypeExplanation = (type: QuestionType): string => {
@@ -122,7 +123,8 @@ const QuestionJumpModal: React.FC<{
     questions: Question[];
     answered: string[];
     flagged: string[];
-}> = ({ isOpen, onClose, onJump, questions, answered, flagged }) => {
+    isNavigationDisabled: boolean; // NOVO: para desabilitar navegação durante transição
+}> = ({ isOpen, onClose, onJump, questions, answered, flagged, isNavigationDisabled }) => { // NOVO prop
     const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
     const domains = [...new Set(questions.map(q => q.domain))];
@@ -167,6 +169,7 @@ const QuestionJumpModal: React.FC<{
                                 key={status}
                                 onClick={() => setFilterStatus(status)}
                                 className={`px-3 py-1.5 text-sm rounded-full transition-colors border ${filterStatus === status ? 'bg-cyan-500/20 border-cyan-500 text-cyan-600 dark:text-cyan-300' : 'bg-gray-100 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700'}`}
+                                disabled={isNavigationDisabled} // Desabilita botão durante transição
                             >
                                 { {all: 'Todas', answered: 'Respondidas', unanswered: 'Não Respondidas', flagged: 'Sinalizadas'}[status] }
                             </button>
@@ -183,6 +186,7 @@ const QuestionJumpModal: React.FC<{
                                 key={domain} 
                                 onClick={() => setSelectedDomain(d => d === domain ? null : domain)}
                                 className={`px-3 py-1.5 text-sm rounded-full transition-colors border ${selectedDomain === domain ? 'bg-cyan-500/20 border-cyan-500 text-cyan-600 dark:text-cyan-300' : 'bg-gray-100 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700'}`}
+                                disabled={isNavigationDisabled} // Desabilita botão durante transição
                             >
                                 {domain}
                             </button>
@@ -200,6 +204,7 @@ const QuestionJumpModal: React.FC<{
                                     key={question.id}
                                     onClick={() => onJump(originalIndex)}
                                     className={`relative flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm border bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-cyan-400 hover:text-black ${isFlagged ? 'border-amber-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                    disabled={isNavigationDisabled} // Desabilita botão durante transição
                                 >
                                     {originalIndex + 1}
                                     {isAnswered && !isFlagged && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-green-500"></span>}
@@ -221,8 +226,9 @@ const QuestionNavigator: React.FC<{
     flagged: string[];
     onJump: (index: number) => void;
     onOpenJumpModal: () => void;
-    onReorder: (dragIndex: number, dropIndex: number) => void;
-}> = ({ questions, current, answered, flagged, onJump, onOpenJumpModal, onReorder }) => {
+    onReorder: (dragIndex: number, dropIndex: number) => void; // Add onReorder prop
+    isNavigationDisabled: boolean; // NOVO: para desabilitar navegação durante transição
+}> = ({ questions, current, answered, flagged, onJump, onOpenJumpModal, onReorder, isNavigationDisabled }) => { // NOVO prop
     const [searchQuery, setSearchQuery] = useState('');
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -242,7 +248,7 @@ const QuestionNavigator: React.FC<{
     const isSearchActive = searchQuery.trim() !== '';
 
     const handleDragStart = (e: React.DragEvent<HTMLButtonElement>, index: number) => {
-        if (isSearchActive) {
+        if (isSearchActive || isNavigationDisabled) { // Desabilita arrastar durante transição
             e.preventDefault();
             return;
         }
@@ -256,12 +262,13 @@ const QuestionNavigator: React.FC<{
 
     const handleDrop = (e: React.DragEvent<HTMLButtonElement>, dropIndex: number) => {
         e.preventDefault();
-        if (isSearchActive) return;
+        if (isSearchActive || isNavigationDisabled) return; // Desabilita soltar durante transição
 
         const dragIndexStr = e.dataTransfer.getData('text/plain');
         if (dragIndexStr) {
             const dragIndex = parseInt(dragIndexStr, 10);
             onReorder(dragIndex, dropIndex);
+            setDragOverIndex(null); // Clear dragOverIndex on drop
         }
     };
     
@@ -284,12 +291,14 @@ const QuestionNavigator: React.FC<{
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Filtrar questões..."
                     className="w-full pl-8 pr-8 py-1.5 text-sm bg-gray-100 dark:bg-slate-800/60 border border-gray-300 dark:border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-800 dark:text-gray-200 transition-colors"
+                    disabled={isNavigationDisabled} // Desabilita input durante transição
                 />
                  {searchQuery && (
                     <button 
                         onClick={() => setSearchQuery('')}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                         aria-label="Limpar busca"
+                        disabled={isNavigationDisabled} // Desabilita botão durante transição
                     >
                         <XMarkIcon className="w-4 h-4" />
                     </button>
@@ -300,8 +309,8 @@ const QuestionNavigator: React.FC<{
                     const isAnswered = answered.includes(question.id);
                     const isCurrent = originalIndex === current;
                     const isFlagged = flagged.includes(question.id);
-                    const isDragging = draggingIndex === originalIndex;
-                    const isDragOver = dragOverIndex === originalIndex && draggingIndex !== originalIndex;
+                    const isDraggingThis = draggingIndex === originalIndex;
+                    const isDragOverThis = dragOverIndex === originalIndex && draggingIndex !== originalIndex;
 
                     let buttonClass = `border text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 ${isSearchActive ? 'cursor-pointer' : 'cursor-grab'} ${isFlagged ? 'border-amber-500' : 'border-gray-300 dark:border-slate-700'}`;
                     
@@ -310,9 +319,9 @@ const QuestionNavigator: React.FC<{
                     }
                     
                     if (!isSearchActive) {
-                        if (isDragging) {
+                        if (isDraggingThis) {
                             buttonClass += " opacity-50 scale-105 rotate-3 cursor-grabbing";
-                        } else if (isDragOver) {
+                        } else if (isDragOverThis) {
                             buttonClass = "scale-110 bg-cyan-500/20 border-2 border-solid border-cyan-400 ring-2 ring-cyan-400 ring-offset-2 dark:ring-offset-slate-900";
                         }
                     }
@@ -321,9 +330,9 @@ const QuestionNavigator: React.FC<{
                         <button 
                             key={question.id} 
                             onClick={() => onJump(originalIndex)}
-                            draggable={!isSearchActive}
+                            draggable={!isSearchActive && !isNavigationDisabled} // Desabilita arrastar durante transição
                             onDragStart={(e) => handleDragStart(e, originalIndex)}
-                            onDragEnter={() => setDragOverIndex(originalIndex)}
+                            onDragEnter={() => !isDraggingThis && setDragOverIndex(originalIndex)} // Prevent self-drag-over
                             onDragLeave={() => setDragOverIndex(null)}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, originalIndex)}
@@ -331,6 +340,7 @@ const QuestionNavigator: React.FC<{
                             className={`relative flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm ${buttonClass}`}
                             aria-label={`Ir para a questão ${originalIndex + 1}`}
                             aria-current={isCurrent ? 'page' : undefined}
+                            disabled={isNavigationDisabled} // Desabilita botão durante transição
                         >
                             {originalIndex + 1}
                             {isAnswered && !isFlagged && (
@@ -344,6 +354,7 @@ const QuestionNavigator: React.FC<{
                 <button 
                     onClick={onOpenJumpModal} 
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                    disabled={isNavigationDisabled} // Desabilita botão durante transição
                 >
                     <SquaresPlusIcon className="w-5 h-5" />
                     Ir para...
@@ -353,42 +364,61 @@ const QuestionNavigator: React.FC<{
     );
 };
 
+// Initializer for orderedQuestions
+const getInitialOrderedQuestions = (examData: ExamData): Question[] => {
+    const savedProgressRaw = localStorage.getItem('cortexExamProgress');
+    if (savedProgressRaw) {
+        try {
+            const savedProgress = JSON.parse(savedProgressRaw);
+            if (savedProgress.examData?.examCode === examData.examCode && savedProgress.orderedQuestionIds) {
+                const idOrder: string[] = savedProgress.orderedQuestionIds;
+                const questionMap = new Map(examData.questions.map(q => [q.id, q]));
+                const savedOrder = idOrder.map(id => questionMap.get(id)).filter((q): q is Question => !!q);
+                
+                if (savedOrder.length === examData.questions.length) {
+                    return savedOrder;
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao carregar ordem salva de questões:", e);
+        }
+    }
+    return examData.questions;
+};
+
+// Initializer for flaggedQuestions
+const getInitialFlaggedQuestions = (examData: ExamData): string[] => {
+    const savedProgressRaw = localStorage.getItem('cortexExamProgress');
+    if (savedProgressRaw) {
+        try {
+            const savedProgress = JSON.parse(savedProgressRaw);
+            if (savedProgress.examData?.examCode === examData.examCode && savedProgress.flaggedQuestions) {
+                return savedProgress.flaggedQuestions;
+            }
+        } catch (e) {
+            console.error("Erro ao carregar questões sinalizadas:", e);
+        }
+    }
+    return [];
+};
+
 
 const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnswers = {}, initialTimeLeft = null, attempts }) => {
     const [answers, setAnswers] = useState<UserAnswer>(initialAnswers);
     const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
-    const [animationClass, setAnimationClass] = useState('opacity-100');
+    const [animationClass, setAnimationClass] = useState('opacity-100 translate-y-0'); // Estado inicial da animação
+    const [animationKey, setAnimationKey] = useState(0); // Novo estado para forçar remount da animação
+    const [isTransitioning, setIsTransitioning] = useState(false); // NOVO: para desabilitar botões durante transição
     const [isReadingMode, setIsReadingMode] = useState(false);
     const [currentQuestionTitle, setCurrentQuestionTitle] = useState('');
     const [isTitleLoading, setIsTitleLoading] = useState(false);
-    const [flaggedQuestions, setFlaggedQuestions] = useState<string[]>([]);
+    
+    // Initialize flaggedQuestions and orderedQuestions using initializer functions
+    const [flaggedQuestions, setFlaggedQuestions] = useState<string[]>(() => getInitialFlaggedQuestions(examData));
+    const [orderedQuestions, setOrderedQuestions] = useState<Question[]>(() => getInitialOrderedQuestions(examData));
     
     const titleCache = useRef<Map<string, string>>(new Map());
     const isMountedRef = useRef(true);
-    
-    const [orderedQuestions, setOrderedQuestions] = useState<Question[]>(() => {
-        const savedProgressRaw = localStorage.getItem('cortexExamProgress');
-        if (savedProgressRaw) {
-            try {
-                const savedProgress = JSON.parse(savedProgressRaw);
-                if (savedProgress.examData?.examCode === examData.examCode) {
-                    setFlaggedQuestions(savedProgress.flaggedQuestions || []);
-                    if (savedProgress.orderedQuestionIds) {
-                        const idOrder: string[] = savedProgress.orderedQuestionIds;
-                        const questionMap = new Map(examData.questions.map(q => [q.id, q]));
-                        const savedOrder = idOrder.map(id => questionMap.get(id)).filter((q): q is Question => !!q);
-                        
-                        if (savedOrder.length === examData.questions.length) {
-                            return savedOrder;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("Erro ao carregar ordem salva:", e);
-            }
-        }
-        return examData.questions;
-    });
     
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
@@ -403,6 +433,22 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
         isMountedRef.current = true;
         return () => { isMountedRef.current = false; };
     }, []);
+
+    // Effect to reset and start entry animation for new questions
+    useEffect(() => {
+        // Only trigger entry animation if not in the middle of a transition out
+        if (!isTransitioning) {
+            setAnimationClass('opacity-0 translate-y-2'); // Set initial hidden state
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => { // Double rAF for robustness
+                    if (isMountedRef.current) {
+                        setAnimationClass('opacity-100 translate-y-0'); // Then animate to visible
+                    }
+                });
+            });
+        }
+    }, [currentQuestionIndex, animationKey, isTransitioning, isMountedRef]);
+
 
     useEffect(() => {
         const generateTitle = async () => {
@@ -524,16 +570,21 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
         );
     };
 
-    const navigateToQuestionWithAnimation = (index: number) => {
-        if (index < 0 || index >= orderedQuestions.length || index === currentQuestionIndex) return;
+    const navigateToQuestionWithAnimation = useCallback((index: number) => {
+        if (index < 0 || index >= orderedQuestions.length || index === currentQuestionIndex || isTransitioning) return;
 
-        setAnimationClass('opacity-0'); 
+        setIsTransitioning(true); // Disable buttons during transition
+        setAnimationClass('opacity-0 translate-y-2'); // Start exit animation for current question
 
         setTimeout(() => {
-            setCurrentQuestionIndex(index);
-            setAnimationClass('opacity-100'); 
-        }, 200); 
-    };
+            if (!isMountedRef.current) return;
+
+            setCurrentQuestionIndex(index); // Update question index
+            setAnimationKey(prev => prev + 1); // Increment key to force remount and re-trigger useEffect for entry
+            setIsTransitioning(false); // Enable buttons after transition
+        }, 200); // This duration must match the CSS transition-duration
+    }, [currentQuestionIndex, orderedQuestions.length, orderedQuestions, isMountedRef, isTransitioning]);
+
 
     const handleJumpToQuestion = (index: number) => {
         navigateToQuestionWithAnimation(index);
@@ -552,22 +603,26 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
         navigateToQuestionWithAnimation(currentQuestionIndex - 1);
     };
     
-    const handleReorder = (dragIndex: number, dropIndex: number) => {
+    const handleReorder = useCallback((dragIndex: number, dropIndex: number) => {
         if (dragIndex === dropIndex) return;
         
-        const currentQuestionId = orderedQuestions[currentQuestionIndex].id;
-        
-        const newOrderedQuestions = [...orderedQuestions];
-        const [draggedItem] = newOrderedQuestions.splice(dragIndex, 1);
-        newOrderedQuestions.splice(dropIndex, 0, draggedItem);
-        
-        setOrderedQuestions(newOrderedQuestions);
-        
-        const newCurrentIndex = newOrderedQuestions.findIndex(q => q.id === currentQuestionId);
-        if (newCurrentIndex !== -1) {
-            setCurrentQuestionIndex(newCurrentIndex);
-        }
-    };
+        setOrderedQuestions(prevQuestions => {
+            const currentQuestionId = prevQuestions[currentQuestionIndex].id; // Get ID before reordering
+            const newOrderedQuestions = [...prevQuestions];
+            const [draggedItem] = newOrderedQuestions.splice(dragIndex, 1);
+            newOrderedQuestions.splice(dropIndex, 0, draggedItem);
+            
+            // Find the new index of the previously active question to maintain focus
+            const newCurrentIndex = newOrderedQuestions.findIndex(q => q.id === currentQuestionId);
+            if (newCurrentIndex !== -1) {
+                // Ensure reordering doesn't trigger a visual 'jump' if the current question's index changes
+                // The animation will re-trigger for the same visual question, which is acceptable.
+                setCurrentQuestionIndex(newCurrentIndex);
+                setAnimationKey(prev => prev + 1); // Also trigger animation reset for the same question
+            }
+            return newOrderedQuestions;
+        });
+    }, [currentQuestionIndex]);
     
     const progress = ((currentQuestionIndex + 1) / orderedQuestions.length) * 100;
     const currentQuestion = orderedQuestions[currentQuestionIndex];
@@ -587,6 +642,7 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                                 className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-800 transition-colors"
                                 aria-label={isReadingMode ? "Sair do Modo de Leitura" : "Entrar no Modo de Leitura"}
                                 title={isReadingMode ? "Sair do Modo de Leitura" : "Entrar no Modo de Leitura"}
+                                disabled={isTransitioning} // Desabilita botão durante transição
                             >
                                 <BookOpenIcon className={`w-6 h-6 ${isReadingMode ? 'text-cyan-400' : ''}`} />
                             </button>
@@ -608,9 +664,13 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
 
                 <div className={`w-full max-w-7xl grid grid-cols-1 ${!isReadingMode && 'md:grid-cols-3'} gap-8`}>
                     <div className={`flex flex-col gap-6 ${!isReadingMode ? 'md:col-span-2' : 'col-span-1'}`}>
-                        <div className={`transition-opacity duration-200 ease-in-out ${animationClass}`}>
+                        {/* Aplica a classe de animação ao container da QuestionCard, usando key para forçar remontagem e reinício da animação */}
+                        <div 
+                            key={`${currentQuestionIndex}-${animationKey}`} // Combina chaves para forçar remount e re-trigger do useEffect
+                            className={`transition-opacity transition-transform duration-200 ease-in-out ${animationClass}`}
+                        >
                              {currentQuestion && <QuestionCard
-                                key={currentQuestion.id}
+                                key={currentQuestion.id} // Manter key para QuestionCard
                                 question={currentQuestion}
                                 userAnswer={answers[currentQuestion.id] || []}
                                 onAnswerChange={handleAnswerChange}
@@ -625,15 +685,15 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
 
                          {!isReadingMode && (
                             <div className="flex justify-between w-full">
-                                <button onClick={goToPrev} disabled={currentQuestionIndex === 0} className="px-6 py-2 border border-gray-300 dark:border-slate-600 text-base font-medium rounded-md text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                                <button onClick={goToPrev} disabled={currentQuestionIndex === 0 || isTransitioning} className="px-6 py-2 border border-gray-300 dark:border-slate-600 text-base font-medium rounded-md text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                                     Anterior
                                 </button>
                                 {currentQuestionIndex < orderedQuestions.length - 1 ? (
-                                    <button onClick={goToNext} className="px-6 py-2 border border-transparent text-base font-bold rounded-md text-black bg-cyan-400 hover:bg-cyan-300 transition-colors shadow-lg hover:shadow-cyan-400/20">
+                                    <button onClick={goToNext} disabled={isTransitioning} className="px-6 py-2 border border-transparent text-base font-bold rounded-md text-black bg-cyan-400 hover:bg-cyan-300 transition-colors shadow-lg hover:shadow-cyan-400/20">
                                         Próxima
                                     </button>
                                 ) : (
-                                    <button onClick={() => onFinishExam(answers)} className="px-6 py-2 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors shadow-lg hover:shadow-green-600/30">
+                                    <button onClick={() => onFinishExam(answers)} disabled={isTransitioning} className="px-6 py-2 border border-transparent text-base font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors shadow-lg hover:shadow-green-600/30">
                                         Finalizar Exame
                                     </button>
                                 )}
@@ -650,6 +710,7 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                                 onJump={handleJumpToQuestion}
                                 onOpenJumpModal={() => setIsJumpModalOpen(true)}
                                 onReorder={handleReorder}
+                                isNavigationDisabled={isTransitioning} // Passa o estado para desabilitar navegação
                             />
                         </div>
                     )}
@@ -662,6 +723,7 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                 questions={orderedQuestions}
                 answered={Object.keys(answers).filter(key => answers[key] && answers[key].length > 0)}
                 flagged={flaggedQuestions}
+                isNavigationDisabled={isTransitioning} // Passa o estado para desabilitar navegação
             />
         </>
     );

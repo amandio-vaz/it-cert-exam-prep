@@ -1,13 +1,19 @@
 import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/genai";
-import { UploadedFile, ExamData, Question, UserAnswer, Attempt, QuestionType } from '../types';
+import { UploadedFile, ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
 
 const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  // This is a placeholder for environments where process.env is not defined.
-  // In a real build process, this should be handled properly.
-  console.warn("API_KEY environment variable not found.");
-}
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+let aiInstance: GoogleGenAI | null = null; // Declara uma instância anulável
+
+// Função para obter ou criar a instância do GoogleGenAI
+const getGenAI = (): GoogleGenAI => {
+  if (!API_KEY) {
+    throw new Error("A chave de API não está configurada. Por favor, certifique-se de que process.env.API_KEY esteja definido.");
+  }
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI({ apiKey: API_KEY });
+  }
+  return aiInstance;
+};
 
 const examSchema = {
   type: Type.OBJECT,
@@ -90,6 +96,7 @@ Você é um especialista avançado em preparação para exames de certificação
 
 // Função auxiliar para resumir e extrair pontos-chave de um único arquivo.
 const distillFileContent = async (file: UploadedFile, examCode: string, language: 'pt-BR' | 'en-US'): Promise<string> => {
+    const ai = getGenAI();
     const modelName = 'gemini-2.5-flash';
     const prompt = language === 'en-US'
         ? `You are an IT certification expert. Concisely extract and summarize all key concepts, technical details, and important topics from the provided document relevant to the '${examCode}' certification. Focus on information likely to appear on the exam. Return only the summarized text.`
@@ -108,7 +115,10 @@ const distillFileContent = async (file: UploadedFile, examCode: string, language
         const response = await ai.models.generateContent({
             model: modelName,
             contents,
-            // pt-BR: Limita o tamanho da resposta para garantir um resumo conciso e otimizar custos.
+            // pt-BR: Limita o tamanho da resposta para garantir um resumo conciso e otimizar custos,
+            // assegurando uma análise focada dos materiais de estudo.
+            // en-US: Limits the response size to ensure a concise summary and optimize costs,
+            // ensuring a focused analysis of the study materials.
             config: {
                 maxOutputTokens: 1536,
                 thinkingConfig: { thinkingBudget: 512 },
@@ -130,6 +140,7 @@ export const generateExam = async (
     onStatusUpdate: (status: string) => void,
     language: 'pt-BR' | 'en-US'
 ): Promise<ExamData> => {
+    const ai = getGenAI();
     const modelName = 'gemini-2.5-flash';
     
     // Etapa 1: Destilar o conteúdo de cada arquivo para evitar exceder o limite de tokens.
@@ -180,7 +191,12 @@ export const generateExam = async (
     const config = {
         systemInstruction,
         tools: [{ googleSearch: {} }],
-        // pt-BR: Define um limite de tokens dinâmico baseado no número de questões (600 por questão), otimizando custos.
+        // pt-BR: Ajusta dinamicamente os limites de tokens com base na quantidade de questões (`questionCount`),
+        // alocando 600 tokens para o output final *por questão* e 200 tokens para o processo de raciocínio *por questão*.
+        // Isso garante um exame focado, eficiente e otimiza a qualidade e o custo.
+        // en-US: Dynamically adjusts token limits based on the `questionCount`,
+        // allocating 600 tokens for the final output *per question* and 200 tokens for the model's thinking process *per question*.
+        // This ensures a focused and efficient exam, optimizing quality and cost.
         maxOutputTokens: questionCount * 600,
         thinkingConfig: { thinkingBudget: questionCount * 200 },
     };
@@ -212,6 +228,7 @@ export const generateExam = async (
 
 
 export const generateStudyPlan = async (examData: ExamData, userAnswers: UserAnswer, attempt: Attempt): Promise<string> => {
+    const ai = getGenAI();
     // Agrupa as questões por domínio e calcula o desempenho
     const domainPerformance = examData.questions.reduce((acc, q) => {
         const domain = q.domain || 'Geral';
@@ -307,7 +324,10 @@ Para domínios com pontuação **acima de 90%**, apenas liste-os com um emoji �
         contents: prompt,
         config: { 
             tools: [{ googleSearch: {} }],
-            // pt-BR: Limita o tamanho do plano de estudos para garantir que seja detalhado, mas conciso.
+            // pt-BR: Limita o tamanho do plano de estudos para garantir que seja detalhado, mas conciso,
+            // otimizando a eficiência da resposta.
+            // en-US: Limits the study plan size to ensure it is detailed yet concise,
+            // optimizing response efficiency.
             maxOutputTokens: 3072,
             thinkingConfig: { thinkingBudget: 1024 },
         },
@@ -317,6 +337,7 @@ Para domínios com pontuação **acima de 90%**, apenas liste-os com um emoji �
 };
 
 export const generateSpeech = async (text: string): Promise<string> => {
+    const ai = getGenAI();
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-preview-tts',
         contents: [{ parts: [{ text: `Leia o seguinte texto de forma clara e profissional: ${text}` }] }],
@@ -338,6 +359,7 @@ export const generateSpeech = async (text: string): Promise<string> => {
 };
 
 export const analyzeImageWithGemini = async (image: UploadedFile, prompt: string): Promise<string> => {
+    const ai = getGenAI();
     const imagePart = {
         inlineData: {
             mimeType: image.type,
@@ -349,7 +371,10 @@ export const analyzeImageWithGemini = async (image: UploadedFile, prompt: string
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, textPart] },
-        // pt-BR: Limita a resposta da análise de imagem para manter a concisão e controlar custos.
+        // pt-BR: Limita a resposta da análise de imagem para manter a concisão e controlar custos,
+        // garantindo uma análise focada.
+        // en-US: Limits the image analysis response to maintain conciseness and control costs,
+        // ensuring a focused analysis.
         config: {
             maxOutputTokens: 2048,
             thinkingConfig: { thinkingBudget: 1024 },
@@ -360,13 +385,16 @@ export const analyzeImageWithGemini = async (image: UploadedFile, prompt: string
 };
 
 export const generateQuestionTitle = async (questionText: string): Promise<string> => {
+    const ai = getGenAI();
     const prompt = `Gere um título curto e conciso (máximo 5 palavras) que resuma a seguinte questão de certificação de TI. O título deve capturar o conceito principal testado. Retorne apenas o texto do título, sem formatação extra ou explicação. Questão: "${questionText}"`;
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
-            maxOutputTokens: 50, // Limite baixo para uma resposta rápida e curta
+            // pt-BR: Limite de tokens baixo para um título rápido e curto, garantindo foco.
+            // en-US: Low token limit for a quick and short title, ensuring focus.
+            maxOutputTokens: 50, 
             temperature: 0.2, // Baixa temperatura para um título mais focado e menos criativo
         },
     });

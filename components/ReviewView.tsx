@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Question, UserAnswer } from '../types';
 import { ArrowLeftIcon, CheckCircleIcon, XCircleIcon, ClipboardDocumentListIcon } from './icons';
@@ -153,7 +154,10 @@ const ReviewView: React.FC<ReviewViewProps> = ({ questions, userAnswers, onBackT
                 </div>
                 
                 <div className="mt-6 p-4 bg-gray-100 dark:bg-slate-800/50 rounded-md">
-                    <h4 className="font-semibold text-cyan-600 dark:text-cyan-400">Explicação</h4>
+                    <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-cyan-600 dark:text-cyan-400">Explicação</h4>
+                        <AudioPlayer textToSpeak={question.explanation} />
+                    </div>
                     <p className="text-gray-700 dark:text-gray-300 mt-2">{question.explanation}</p>
                 </div>
             </div>

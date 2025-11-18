@@ -40,6 +40,8 @@ export interface Attempt {
   correctAnswers: number;
   timestamp: number;
   examCode: string;
+  examData: ExamData; // Store the full exam data for review
+  userAnswers: UserAnswer; // Store user's answers for this attempt
 }
 
 export interface UploadedFile {
@@ -58,4 +60,5 @@ export interface User {
     email: string;
 }
 
-export type AppState = 'login' | 'config' | 'generating' | 'taking_exam' | 'results' | 'analyzing_image' | 'generating_study_plan' | 'study_plan' | 'reviewing_exam' | 'viewing_flashcards';
+// Removed AppState enum, as navigation is now handled by React Router.
+// The `appState` in localStorage will still be used for restoring session.

@@ -1,9 +1,8 @@
 
 
-
-
 import React, { useState, useCallback, useEffect } from 'react';
-import { AppState, ExamData, Attempt, Question, UserAnswer, UploadedFile, User } from './types';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'; // Import React Router hooks and components
+import { ExamData, Attempt, Question, UserAnswer, UploadedFile, User } from './types';
 import { generateExam, generateStudyPlan, analyzeImageWithGemini } from './services/geminiService';
 
 import Header from './components/Header';
@@ -16,9 +15,17 @@ import LoadingIndicator from './components/LoadingIndicator';
 import ReviewView from './components/ReviewView';
 import FlashcardView from './components/FlashcardView';
 import LoginView from './components/LoginView';
+import AttemptHistoryView from './components/AttemptHistoryView';
+import AttemptDetailsView from './components/AttemptDetailsView';
+// Fix: Import Sidebar as a named export
+import Sidebar from './components/Sidebar'; // Importar o novo componente Sidebar como default
+
 
 const App: React.FC = () => {
-    const [appState, setAppState] = useState<AppState>('login');
+    // Removed appState, now using React Router for navigation state
+    const location = useLocation();
+    const navigate = useNavigate();
+
     const [user, setUser] = useState<User | null>(null);
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
     const [examCode, setExamCode] = useState<string>('');
@@ -29,12 +36,14 @@ const App: React.FC = () => {
     const [userAnswers, setUserAnswers] = useState<UserAnswer>({});
     const [currentAttempt, setCurrentAttempt] = useState<Attempt | null>(null);
     const [attempts, setAttempts] = useState<Attempt[]>([]);
+    // selectedAttemptDetails will be managed by route params
     const [studyPlan, setStudyPlan] = useState<string>('');
     const [questionsToReview, setQuestionsToReview] = useState<Question[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [initialTimeLeft, setInitialTimeLeft] = useState<number | null>(null);
     const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
     const [generationStatus, setGenerationStatus] = useState<string>('');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Novo estado para o sidebar
 
 
     useEffect(() => {
@@ -69,7 +78,7 @@ const App: React.FC = () => {
                         setUserAnswers(savedUserAnswers);
                         setAttempts(savedAttempts || []);
                         setInitialTimeLeft(savedTimeLeft);
-                        setAppState('taking_exam');
+                        navigate('/exam'); // Navigate to exam view
                     } else {
                         localStorage.removeItem('cortexExamProgress');
                     }
@@ -79,7 +88,7 @@ const App: React.FC = () => {
                 localStorage.removeItem('cortexExamProgress');
             }
         }
-    }, []);
+    }, [navigate]);
 
     // ===== Mock Authentication Handlers =====
     const handleLogin = (email: string) => {
@@ -101,14 +110,22 @@ const App: React.FC = () => {
             setAttempts([]);
         }
 
-        setAppState('config');
+        navigate('/'); // Navigate to config view after login
     };
 
     const handleLogout = () => {
         setUser(null);
         setAttempts([]); // Limpa as tentativas ao deslogar
-        returnToConfig();
-        setAppState('login');
+        setIsSidebarOpen(false); // Fecha o sidebar ao deslogar
+        navigate('/login'); // Redireciona para a página de login
+    };
+
+    const toggleSidebar = () => {
+        setIsSidebarOpen(prev => !prev);
+    };
+
+    const closeSidebar = () => {
+        setIsSidebarOpen(false);
     };
 
 
@@ -119,7 +136,7 @@ const App: React.FC = () => {
         }
         setError(null);
         localStorage.removeItem('cortexExamProgress');
-        setAppState('generating');
+        // setAppState('generating'); // Replaced by conditional rendering based on loading state
         setGenerationStatus("Iniciando a geração do seu exame...");
         try {
             const onStatusUpdate = (status: string) => {
@@ -129,7 +146,7 @@ const App: React.FC = () => {
             const exam = await generateExam(uploadedFiles, examCode, questionCount, extraTopics, onStatusUpdate, language);
             
             const initialProgress = {
-                appState: 'taking_exam',
+                appState: 'taking_exam', // Still needed for local storage to identify the state
                 examData: exam,
                 userAnswers: {},
                 timeLeft: exam.questions.length * 90, // 90 seconds per question
@@ -140,7 +157,8 @@ const App: React.FC = () => {
             setExamData(exam);
             setUserAnswers({});
             setInitialTimeLeft(null);
-            setAppState('taking_exam');
+            closeSidebar(); // Fecha o sidebar após iniciar o exame
+            navigate('/exam'); // Navigate to exam view
         } catch (e) {
             console.error(e);
             let errorMessage = 'Falha ao gerar o exame. A IA pode estar sobrecarregada ou o conteúdo fornecido pode ser inválido. Tente novamente.';
@@ -148,11 +166,12 @@ const App: React.FC = () => {
                 errorMessage = 'Um dos PDFs fornecidos excede o limite de 1000 páginas. Por favor, use um arquivo menor ou divida-o.';
             }
             setError(errorMessage);
-            setAppState('config');
+            closeSidebar(); // Fecha o sidebar em caso de erro
+            navigate('/'); // Navigate back to config view on error
         } finally {
             setGenerationStatus('');
         }
-    }, [examCode, uploadedFiles, questionCount, extraTopics, attempts]);
+    }, [examCode, uploadedFiles, questionCount, extraTopics, attempts, navigate]);
 
     const handleFinishExam = useCallback((finalAnswers: UserAnswer) => {
         if (!examData || !user) return;
@@ -172,6 +191,8 @@ const App: React.FC = () => {
             correctAnswers: correctCount,
             timestamp: Date.now(),
             examCode: examData.examCode,
+            examData: examData, // Store full exam data
+            userAnswers: finalAnswers, // Store user's answers for this attempt
         };
         
         const updatedAttempts = [...attempts, newAttempt];
@@ -189,25 +210,31 @@ const App: React.FC = () => {
 
         setUserAnswers(finalAnswers);
         setCurrentAttempt(newAttempt);
-        setAppState('results');
+        closeSidebar(); // Fecha o sidebar
+        navigate('/results'); // Navigate to results view
         localStorage.removeItem('cortexExamProgress');
 
-    }, [examData, user, attempts]);
+    }, [examData, user, attempts, navigate]);
     
     const handleGenerateStudyPlan = useCallback(async () => {
         if (!examData || !currentAttempt) return;
 
-        setAppState('generating_study_plan');
+        // setAppState('generating_study_plan'); // Replaced by conditional rendering
+        setGenerationStatus("Criando seu plano de estudos personalizado...");
         try {
             const plan = await generateStudyPlan(examData, userAnswers, currentAttempt);
             setStudyPlan(plan);
-            setAppState('study_plan');
+            closeSidebar(); // Fecha o sidebar
+            navigate('/study-plan'); // Navigate to study plan view
         } catch (e) {
             console.error(e);
             setError('Falha ao gerar o plano de estudos.');
-            setAppState('results');
+            closeSidebar(); // Fecha o sidebar
+            navigate('/results'); // Navigate back to results on error
+        } finally {
+            setGenerationStatus('');
         }
-    }, [examData, userAnswers, currentAttempt]);
+    }, [examData, userAnswers, currentAttempt, navigate]);
 
     const handleAnalyzeImage = useCallback(async (file: UploadedFile, prompt: string) => {
         try {
@@ -222,8 +249,9 @@ const App: React.FC = () => {
     const handleStartReview = useCallback(() => {
         if (!examData) return;
         setQuestionsToReview(examData.questions);
-        setAppState('reviewing_exam');
-    }, [examData]);
+        closeSidebar(); // Fecha o sidebar
+        navigate('/review'); // Navigate to review view
+    }, [examData, navigate]);
 
     const returnToConfig = () => {
         setExamData(null);
@@ -232,90 +260,221 @@ const App: React.FC = () => {
         setStudyPlan('');
         setQuestionsToReview([]);
         setError(null);
-        setAppState('config');
+        closeSidebar(); // Fecha o sidebar
+        navigate('/'); // Navigate to config view
         localStorage.removeItem('cortexExamProgress');
     };
     
-    const handleViewFlashcards = () => setAppState('viewing_flashcards');
+    const handleViewFlashcards = () => { closeSidebar(); navigate('/flashcards'); }; // Navigate to flashcards view
+    const handleViewAttemptHistory = () => { closeSidebar(); navigate('/history'); }; // Navigate to history view
+    const handleViewImageAnalyzer = () => { closeSidebar(); navigate('/image-analyzer'); }; // Navigate to image analyzer view
+    const handleViewAttemptDetails = (attempt: Attempt) => {
+        closeSidebar(); // Fecha o sidebar
+        navigate(`/history/${attempt.timestamp}`); // Navigate to attempt details with timestamp
+    };
+    const handleBackFromAttemptDetails = () => navigate('/history'); // Navigate back to history
+
 
     const toggleTheme = () => {
         setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
     };
 
-    const renderContent = () => {
-        switch (appState) {
-            case 'login':
-                return <LoginView onLogin={handleLogin} />;
-            case 'config':
-                return <ConfigView 
-                            uploadedFiles={uploadedFiles}
-                            setUploadedFiles={setUploadedFiles}
-                            examCode={examCode}
-                            setExamCode={setExamCode}
-                            extraTopics={extraTopics}
-                            setExtraTopics={setExtraTopics}
-                            questionCount={questionCount}
-                            setQuestionCount={setQuestionCount}
-                            onStartExam={handleStartExam}
-                            onViewFlashcards={handleViewFlashcards}
-                            error={error}
-                        />;
-            case 'generating':
-                return <LoadingIndicator message={generationStatus || "Gerando seu plano de estudo... A IA está analisando seus materiais e criando questões."} />;
-            case 'taking_exam':
-                return examData && <ExamView 
-                                        examData={examData} 
-                                        onFinishExam={handleFinishExam} 
-                                        initialAnswers={userAnswers}
-                                        initialTimeLeft={initialTimeLeft}
-                                        attempts={attempts}
-                                    />;
-            case 'results':
-                return examData && currentAttempt && <ResultsView 
-                                                        examData={examData} 
-                                                        userAnswers={userAnswers} 
-                                                        attempt={currentAttempt}
-                                                        history={attempts}
-                                                        onTryAgain={returnToConfig}
-                                                        onGenerateStudyPlan={handleGenerateStudyPlan}
-                                                        onStartReview={handleStartReview}
-                                                     />;
-            case 'generating_study_plan':
-                return <LoadingIndicator message="Criando seu plano de estudos personalizado..." />;
-            case 'study_plan':
-                return examData && <StudyPlanView 
-                                        plan={studyPlan} 
-                                        examCode={examData.examCode}
-                                        onBackToResults={() => setAppState('results')} 
-                                        onRegenerate={handleGenerateStudyPlan}
-                                    />;
-            case 'analyzing_image':
-                return <ImageAnalyzerView onAnalyze={handleAnalyzeImage} onBack={() => setAppState('config')} />;
-            case 'reviewing_exam':
-                return <ReviewView 
-                            questions={questionsToReview} 
-                            userAnswers={userAnswers} 
-                            onBackToResults={() => setAppState('results')} 
-                        />;
-            case 'viewing_flashcards':
-                return <FlashcardView onBack={returnToConfig} />;
-            default:
-                return <div>Estado desconhecido</div>;
-        }
-    };
-    
-    if (!theme) {
-      return null; // ou um spinner de carregamento inicial
-    }
+    const showHeader = location.pathname !== '/login';
 
-    const showHeader = appState !== 'login';
+    // Helper to get attempt from URL timestamp
+    const getAttemptByTimestamp = useCallback((timestamp: string | undefined): Attempt | null => {
+        if (!timestamp) return null;
+        return attempts.find(att => att.timestamp.toString() === timestamp) || null;
+    }, [attempts]);
 
     return (
         <div className="min-h-screen flex flex-col font-sans">
-            {showHeader && user && <Header theme={theme} onToggleTheme={toggleTheme} user={user} onLogout={handleLogout} />}
-            <main className="flex-grow container mx-auto p-4 md:p-8 fade-in">
-                {renderContent()}
-            </main>
+            {showHeader && user && (
+                <Header 
+                    theme={theme} 
+                    onToggleTheme={toggleTheme} 
+                    user={user} 
+                    onLogout={handleLogout} 
+                    onToggleSidebar={toggleSidebar} // Passa a função para o Header
+                />
+            )}
+            
+            <div className="flex flex-1 relative"> {/* Flex container para sidebar e conteúdo principal */}
+                {showHeader && user && (
+                    <Sidebar 
+                        isOpen={isSidebarOpen} 
+                        onClose={closeSidebar} 
+                        onNavigate={navigate} // Passa a função navigate para o Sidebar
+                    />
+                )}
+
+                {/* Overlay para fechar sidebar em mobile */}
+                {isSidebarOpen && showHeader && user && (
+                    <div 
+                        className="fixed inset-0 bg-black/50 z-30 md:hidden" 
+                        onClick={closeSidebar}
+                        aria-hidden="true"
+                    ></div>
+                )}
+                
+                <main className={`flex-grow container mx-auto p-4 md:p-8 fade-in ${isSidebarOpen ? 'md:ml-64' : ''} transition-all duration-300 ease-in-out`}>
+                    <Routes>
+                        <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
+                        <Route path="/" element={
+                            user ? (
+                                <ConfigView 
+                                    uploadedFiles={uploadedFiles}
+                                    setUploadedFiles={setUploadedFiles}
+                                    examCode={examCode}
+                                    setExamCode={setExamCode}
+                                    extraTopics={extraTopics}
+                                    setExtraTopics={setExtraTopics}
+                                    questionCount={questionCount}
+                                    setQuestionCount={setQuestionCount}
+                                    onStartExam={handleStartExam}
+                                    onViewFlashcards={handleViewFlashcards}
+                                    onViewAttemptHistory={handleViewAttemptHistory}
+                                    onViewImageAnalyzer={handleViewImageAnalyzer} // Add new handler
+                                    attempts={attempts}
+                                    error={error}
+                                />
+                            ) : (
+                                <LoginView onLogin={handleLogin} />
+                            )
+                        } />
+                        <Route path="/generating" element={<LoadingIndicator message={generationStatus || "Gerando seu plano de estudo... A IA está analisando seus materiais e criando questões."} />} />
+                        <Route path="/exam" element={
+                            examData ? (
+                                <ExamView 
+                                    examData={examData} 
+                                    onFinishExam={handleFinishExam} 
+                                    initialAnswers={userAnswers}
+                                    initialTimeLeft={initialTimeLeft}
+                                    attempts={attempts}
+                                />
+                            ) : (
+                                user ? <ConfigView 
+                                    uploadedFiles={uploadedFiles}
+                                    setUploadedFiles={setUploadedFiles}
+                                    examCode={examCode}
+                                    setExamCode={setExamCode}
+                                    extraTopics={extraTopics}
+                                    setExtraTopics={setExtraTopics}
+                                    questionCount={questionCount}
+                                    setQuestionCount={setQuestionCount}
+                                    onStartExam={handleStartExam}
+                                    onViewFlashcards={handleViewFlashcards}
+                                    onViewAttemptHistory={handleViewAttemptHistory}
+                                    onViewImageAnalyzer={handleViewImageAnalyzer}
+                                    attempts={attempts}
+                                    error={error}
+                                /> : <LoginView onLogin={handleLogin} />
+                            )
+                        } />
+                        <Route path="/results" element={
+                            examData && currentAttempt ? (
+                                <ResultsView 
+                                    examData={examData} 
+                                    userAnswers={userAnswers} 
+                                    attempt={currentAttempt}
+                                    history={attempts}
+                                    onTryAgain={returnToConfig}
+                                    onGenerateStudyPlan={handleGenerateStudyPlan}
+                                    onStartReview={handleStartReview}
+                                    onViewAttemptHistory={handleViewAttemptHistory}
+                                />
+                            ) : (
+                                user ? <ConfigView 
+                                    uploadedFiles={uploadedFiles}
+                                    setUploadedFiles={setUploadedFiles}
+                                    examCode={examCode}
+                                    setExamCode={setExamCode}
+                                    extraTopics={extraTopics}
+                                    setExtraTopics={setExtraTopics}
+                                    questionCount={questionCount}
+                                    setQuestionCount={setQuestionCount}
+                                    onStartExam={handleStartExam}
+                                    onViewFlashcards={handleViewFlashcards}
+                                    onViewAttemptHistory={handleViewAttemptHistory}
+                                    onViewImageAnalyzer={handleViewImageAnalyzer}
+                                    attempts={attempts}
+                                    error={error}
+                                /> : <LoginView onLogin={handleLogin} />
+                            )
+                        } />
+                        <Route path="/generating-study-plan" element={<LoadingIndicator message="Criando seu plano de estudos personalizado..." />} />
+                        <Route path="/study-plan" element={
+                            examData ? (
+                                <StudyPlanView 
+                                    plan={studyPlan} 
+                                    examCode={examData.examCode}
+                                    onBackToResults={() => navigate('/results')} 
+                                    onRegenerate={handleGenerateStudyPlan}
+                                />
+                            ) : (
+                                user ? <ConfigView 
+                                    uploadedFiles={uploadedFiles}
+                                    setUploadedFiles={setUploadedFiles}
+                                    examCode={examCode}
+                                    setExamCode={setExamCode}
+                                    extraTopics={extraTopics}
+                                    setExtraTopics={setExtraTopics}
+                                    questionCount={questionCount}
+                                    setQuestionCount={setQuestionCount}
+                                    onStartExam={handleStartExam}
+                                    onViewFlashcards={handleViewFlashcards}
+                                    onViewAttemptHistory={handleViewAttemptHistory}
+                                    onViewImageAnalyzer={handleViewImageAnalyzer}
+                                    attempts={attempts}
+                                    error={error}
+                                /> : <LoginView onLogin={handleLogin} />
+                            )
+                        } />
+                        <Route path="/image-analyzer" element={<ImageAnalyzerView onAnalyze={handleAnalyzeImage} onBack={() => navigate('/')} />} />
+                        <Route path="/review" element={
+                            questionsToReview.length > 0 ? (
+                                <ReviewView 
+                                    questions={questionsToReview} 
+                                    userAnswers={userAnswers} 
+                                    onBackToResults={() => navigate('/results')} 
+                                />
+                            ) : (
+                                user ? <ConfigView 
+                                    uploadedFiles={uploadedFiles}
+                                    setUploadedFiles={setUploadedFiles}
+                                    examCode={examCode}
+                                    setExamCode={setExamCode}
+                                    extraTopics={extraTopics}
+                                    setExtraTopics={setExtraTopics}
+                                    questionCount={questionCount}
+                                    setQuestionCount={setQuestionCount}
+                                    onStartExam={handleStartExam}
+                                    onViewFlashcards={handleViewFlashcards}
+                                    onViewAttemptHistory={handleViewAttemptHistory}
+                                    onViewImageAnalyzer={handleViewImageAnalyzer}
+                                    attempts={attempts}
+                                    error={error}
+                                /> : <LoginView onLogin={handleLogin} />
+                            )
+                        } />
+                        <Route path="/flashcards" element={<FlashcardView onBack={returnToConfig} />} />
+                        <Route path="/history" element={
+                            <AttemptHistoryView 
+                                attempts={attempts} 
+                                onBack={returnToConfig} 
+                                onViewDetails={handleViewAttemptDetails} 
+                            />
+                        } />
+                        <Route path="/history/:timestamp" element={
+                            <AttemptDetailsView 
+                                attempt={getAttemptByTimestamp(location.pathname.split('/').pop())} // Extract timestamp from URL
+                                onBack={handleBackFromAttemptDetails} 
+                            />
+                        } />
+                        <Route path="*" element={<p className="text-center text-red-500">Página não encontrada</p>} />
+                    </Routes>
+                </main>
+            </div>
             <footer className="py-6 text-gray-500 dark:text-gray-500 text-sm fade-in" style={{ animationDelay: '200ms' }}>
                 <div className="container mx-auto flex flex-col sm:flex-row justify-between items-center gap-4 px-4">
                     <p>Desenvolvido com ❤️ por Amândio Vaz - 2025</p>

@@ -1,5 +1,6 @@
 
 
+
 import React, { useState } from 'react';
 
 const shimmerStyle = `
@@ -21,12 +22,24 @@ interface LoginViewProps {
     onLogin: (email: string) => void;
 }
 
+const isValidEmail = (email: string): boolean => {
+    // Regex simples para validação de e-mail. Pode ser expandido para mais rigor se necessário.
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+};
+
 const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     const [email, setEmail] = useState('');
+    const [emailError, setEmailError] = useState<string | null>(null);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onLogin(email);
+        if (isValidEmail(email)) {
+            setEmailError(null);
+            onLogin(email);
+        } else {
+            setEmailError('Por favor, insira um endereço de e-mail válido.');
+        }
     };
 
     return (
@@ -56,10 +69,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                                     autoComplete="email"
                                     required
                                     value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    className="appearance-none relative block w-full px-3 py-2 border border-slate-700 bg-slate-800/60 placeholder-gray-500 text-gray-200 rounded-md focus:outline-none focus:ring-violet-500 focus:border-violet-500 focus:z-10 sm:text-sm"
+                                    onChange={(e) => {
+                                        setEmail(e.target.value);
+                                        setEmailError(null); // Clear error on change
+                                    }}
+                                    className={`appearance-none relative block w-full px-3 py-2 border ${emailError ? 'border-red-500' : 'border-slate-700'} bg-slate-800/60 placeholder-gray-500 text-gray-200 rounded-md focus:outline-none focus:ring-violet-500 focus:border-violet-500 focus:z-10 sm:text-sm`}
                                     placeholder="Endereço de e-mail"
                                 />
+                                {emailError && <p className="mt-2 text-sm text-red-500">{emailError}</p>}
                             </div>
                         </div>
 
