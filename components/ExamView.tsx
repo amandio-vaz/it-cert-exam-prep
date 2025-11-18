@@ -242,14 +242,23 @@ const QuestionNavigator: React.FC<{
                 Navegação do Exame
             </h3>
              <div className="relative mb-4">
+                <MagnifyingGlassIcon className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none" />
                 <input 
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Filtrar questões..."
-                    className="w-full pl-8 pr-2 py-1.5 text-sm bg-gray-100 dark:bg-slate-800/60 border border-gray-300 dark:border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-800 dark:text-gray-200 transition-colors"
+                    className="w-full pl-8 pr-8 py-1.5 text-sm bg-gray-100 dark:bg-slate-800/60 border border-gray-300 dark:border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-800 dark:text-gray-200 transition-colors"
                 />
-                 <MagnifyingGlassIcon className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none" />
+                 {searchQuery && (
+                    <button 
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                        aria-label="Limpar busca"
+                    >
+                        <XMarkIcon className="w-4 h-4" />
+                    </button>
+                )}
             </div>
             <div className="grid grid-cols-5 gap-2">
                 {filteredQuestions.map(({ question, originalIndex }) => {

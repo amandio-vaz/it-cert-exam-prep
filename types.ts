@@ -39,6 +39,7 @@ export interface Attempt {
   totalQuestions: number;
   correctAnswers: number;
   timestamp: number;
+  examCode: string;
 }
 
 export interface UploadedFile {

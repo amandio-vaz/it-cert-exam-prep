@@ -1,10 +1,12 @@
 
+
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { UploadedFile, Attempt } from '../types';
 import { fileToBase64, fileToArrayBuffer, uint8ArrayToBase64 } from '../utils/fileUtils';
 import { CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon } from './icons';
 import { PDFDocument } from 'pdf-lib';
 import { ALL_EXAM_CODES, POPULAR_EXAMS } from '../data/examCodes';
+import Dashboard from './Dashboard';
 
 interface ConfigViewProps {
     uploadedFiles: UploadedFile[];
@@ -268,28 +270,25 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     const commonTextAreaStyles = "w-full bg-slate-800/60 border border-slate-700 rounded-lg shadow-sm focus:ring-violet-500/50 focus:border-violet-400 text-gray-200 p-3 transition-colors placeholder:text-gray-500 whitespace-pre-wrap break-words";
 
     return (
-        <div className="max-w-3xl mx-auto">
-            {/* Nova Seção de Cabeçalho */}
-            <div className="relative text-center bg-slate-900/50 backdrop-blur-lg rounded-2xl p-8 mb-10 border border-slate-700/50 shadow-2xl overflow-hidden">
-                {/* Efeito de iluminação */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-tr from-purple-800/50 via-violet-700/30 to-transparent rounded-full blur-3xl opacity-60 pointer-events-none"></div>
-                
-                 {/* Estrutura alterada para ser sempre uma coluna, garantindo o alinhamento central em todas as telas. */}
-                <div className="relative z-10 flex flex-col items-center justify-center gap-4">
-                    <img src={logoBase64} alt="CortexPrepExam Logo" className="w-20 h-20" />
-                    <div className="text-center">
-                        <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-slate-400 mb-1">
-                            {isFirstTime ? 'Cortex MyF*ck-IT-Exam' : 'Gerar Novo Simulado'}
-                        </h1>
-                        <p className="text-lg text-slate-400 max-w-md mx-auto">
-                            {isFirstTime 
-                                ? 'Domine sua certificação com simulados gerados por Agentes IA Autônomos.'
-                                : `Gere mais questões para o exame ${examCode || 'selecionado'} com seus materiais.`
-                            }
-                        </p>
+        <div className="max-w-5xl mx-auto">
+            {isFirstTime ? (
+                <div className="relative text-center bg-slate-900/50 backdrop-blur-lg rounded-2xl p-8 mb-10 border border-slate-700/50 shadow-2xl overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-tr from-purple-800/50 via-violet-700/30 to-transparent rounded-full blur-3xl opacity-60 pointer-events-none"></div>
+                    <div className="relative z-10 flex flex-col items-center justify-center gap-4">
+                        <img src={logoBase64} alt="CortexPrepExam Logo" className="w-20 h-20" />
+                        <div className="text-center">
+                            <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-slate-400 mb-1">
+                                Cortex MyF*ck-IT-Exam
+                            </h1>
+                            <p className="text-lg text-slate-400 max-w-md mx-auto">
+                                Domine sua certificação com simulados gerados por Agentes IA Autônomos.
+                            </p>
+                        </div>
                     </div>
                 </div>
-            </div>
+            ) : (
+                <Dashboard attempts={attempts} />
+            )}
 
             <div className="bg-slate-900/70 backdrop-blur-lg rounded-2xl p-8 border border-slate-700/50 shadow-2xl space-y-8">
                 
@@ -464,7 +463,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                         className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-violet-500 hover:from-purple-700 hover:to-violet-600 disabled:from-slate-600 disabled:to-slate-700 disabled:text-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-violet-500 transition-all duration-200 shadow-lg hover:shadow-violet-500/30"
                     >
                         <SparklesIcon className="w-5 h-5" />
-                        {isFirstTime ? 'Gerar Plano de Estudo' : `Gerar ${questionCount} Novas Questões`}
+                        {isFirstTime ? 'Gerar Primeiro Simulado' : 'Gerar Novo Simulado'}
                     </button>
                 </div>
             </div>

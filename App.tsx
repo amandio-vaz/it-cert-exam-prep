@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppState, ExamData, Attempt, Question, UserAnswer, UploadedFile, User } from './types';
 import { generateExam, generateStudyPlan, analyzeImageWithGemini } from './services/geminiService';
@@ -153,6 +154,7 @@ const App: React.FC = () => {
             totalQuestions: examData.questions.length,
             correctAnswers: correctCount,
             timestamp: Date.now(),
+            examCode: examData.examCode,
         };
         
         setUserAnswers(finalAnswers);
