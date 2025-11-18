@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
 import { generateQuestionTitle } from '../services/geminiService';
 import AudioPlayer from './AudioPlayer';
-import { ClockIcon, Squares2X2Icon, SquaresPlusIcon, XMarkIcon, BookOpenIcon, MagnifyingGlassIcon } from './icons';
+import { ClockIcon, Squares2X2Icon, SquaresPlusIcon, XMarkIcon, BookOpenIcon, MagnifyingGlassIcon, BookmarkIcon, InformationCircleIcon } from './icons';
 
 interface ExamViewProps {
     examData: ExamData;
@@ -12,6 +12,21 @@ interface ExamViewProps {
     attempts: Attempt[];
 }
 
+const getQuestionTypeExplanation = (type: QuestionType): string => {
+    switch (type) {
+        case QuestionType.SingleChoice:
+            return "Escolha Única: Apenas uma opção pode ser selecionada como correta.";
+        case QuestionType.MultipleChoice:
+            return "Múltipla Escolha: Uma ou mais opções podem ser selecionadas como corretas.";
+        case QuestionType.Scenario:
+            return "Baseada em Cenário: Leia o cenário com atenção antes de responder.";
+        case QuestionType.TrueFalse:
+            return "Verdadeiro ou Falso: Determine se a afirmação é verdadeira ou falsa.";
+        default:
+            return "Tipo de questão padrão.";
+    }
+};
+
 const QuestionCard: React.FC<{
     question: Question;
     userAnswer: string[];
@@ -20,7 +35,9 @@ const QuestionCard: React.FC<{
     totalQuestions: number;
     title: string;
     isTitleLoading: boolean;
-}> = ({ question, userAnswer, onAnswerChange, questionNumber, totalQuestions, title, isTitleLoading }) => {
+    isFlagged: boolean;
+    onToggleFlag: () => void;
+}> = ({ question, userAnswer, onAnswerChange, questionNumber, totalQuestions, title, isTitleLoading, isFlagged, onToggleFlag }) => {
 
     const handleSingleChoiceChange = (optionId: string) => {
         onAnswerChange([optionId]);
@@ -36,11 +53,25 @@ const QuestionCard: React.FC<{
     return (
         <div className="bg-white dark:bg-slate-900/50 backdrop-blur-sm border border-gray-200 dark:border-slate-700/50 rounded-xl p-6 w-full shadow-lg h-full flex flex-col">
             <div className="flex justify-between items-start mb-4">
-                <div>
+                <div className="flex flex-col gap-1">
                    <p className="text-sm text-cyan-500 dark:text-cyan-400 font-semibold">{question.domain}</p>
-                   <p className="text-sm text-gray-500 dark:text-gray-400">Questão {questionNumber} de {totalQuestions}</p>
+                   <div className="flex items-center gap-2">
+                     <p className="text-sm text-gray-500 dark:text-gray-400">Questão {questionNumber} de {totalQuestions}</p>
+                     <div className="relative group">
+                            <InformationCircleIcon className="w-4 h-4 text-gray-400 cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max p-2 text-xs text-gray-200 bg-slate-700 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible z-10">
+                                {getQuestionTypeExplanation(question.type)}
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-700"></div>
+                            </div>
+                        </div>
+                   </div>
                 </div>
-                <AudioPlayer textToSpeak={question.scenario ? `${question.scenario}. ${question.text}` : question.text} />
+                 <div className="flex items-center gap-2">
+                    <button onClick={onToggleFlag} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors" title={isFlagged ? "Remover sinalização" : "Sinalizar para revisão"}>
+                        <BookmarkIcon className={`w-6 h-6 ${isFlagged ? 'text-amber-500 fill-current' : ''}`} />
+                    </button>
+                    <AudioPlayer textToSpeak={question.scenario ? `${question.scenario}. ${question.text}` : question.text} />
+                </div>
             </div>
 
             {isTitleLoading ? (
@@ -82,25 +113,35 @@ const QuestionCard: React.FC<{
     );
 };
 
+type FilterStatus = 'all' | 'answered' | 'unanswered' | 'flagged';
+
 const QuestionJumpModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
     onJump: (index: number) => void;
     questions: Question[];
-}> = ({ isOpen, onClose, onJump, questions }) => {
-    const [jumpNumber, setJumpNumber] = useState('');
+    answered: string[];
+    flagged: string[];
+}> = ({ isOpen, onClose, onJump, questions, answered, flagged }) => {
     const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
-
+    const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
     const domains = [...new Set(questions.map(q => q.domain))];
 
-    const handleJumpByNumber = (e: React.FormEvent) => {
-        e.preventDefault();
-        const num = parseInt(jumpNumber, 10);
-        if (!isNaN(num) && num >= 1 && num <= questions.length) {
-            onJump(num - 1);
-            setJumpNumber('');
-        }
-    };
+    const filteredQuestions = useMemo(() => {
+        return questions.map((q, index) => ({ question: q, originalIndex: index }))
+            .filter(({ question }) => {
+                const domainMatch = !selectedDomain || question.domain === selectedDomain;
+                if (!domainMatch) return false;
+
+                switch (filterStatus) {
+                    case 'answered': return answered.includes(question.id);
+                    case 'unanswered': return !answered.includes(question.id);
+                    case 'flagged': return flagged.includes(question.id);
+                    case 'all':
+                    default: return true;
+                }
+            });
+    }, [questions, selectedDomain, filterStatus, answered, flagged]);
 
     if (!isOpen) return null;
 
@@ -110,37 +151,33 @@ const QuestionJumpModal: React.FC<{
             onClick={onClose}
         >
             <div 
-                className="bg-white/95 dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl p-6 w-full max-w-lg relative"
+                className="bg-white/95 dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl p-6 w-full max-w-2xl relative"
                 onClick={e => e.stopPropagation()}
             >
                 <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">
                     <XMarkIcon className="w-6 h-6" />
                 </button>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Ir para...</h2>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Ir para Questão</h2>
                 
-                <form onSubmit={handleJumpByNumber} className="mb-6">
-                    <label htmlFor="jump-input" className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Pular para a questão nº</label>
-                    <div className="flex gap-2">
-                        <input
-                            id="jump-input"
-                            type="number"
-                            min="1"
-                            max={questions.length}
-                            value={jumpNumber}
-                            onChange={(e) => setJumpNumber(e.target.value)}
-                            className="flex-grow bg-gray-100 dark:bg-slate-800/60 border border-gray-300 dark:border-slate-700 rounded-md shadow-sm focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-800 dark:text-gray-200 p-2 transition-colors"
-                            placeholder={`1-${questions.length}`}
-                            autoFocus
-                        />
-                        <button type="submit" className="px-4 py-2 border border-transparent font-semibold rounded-md text-black bg-cyan-400 hover:bg-cyan-300 transition-colors">
-                            Ir
-                        </button>
+                 <div className="mb-4">
+                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filtrar por Status</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {(['all', 'answered', 'unanswered', 'flagged'] as FilterStatus[]).map(status => (
+                            <button
+                                key={status}
+                                onClick={() => setFilterStatus(status)}
+                                className={`px-3 py-1.5 text-sm rounded-full transition-colors border ${filterStatus === status ? 'bg-cyan-500/20 border-cyan-500 text-cyan-600 dark:text-cyan-300' : 'bg-gray-100 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700'}`}
+                            >
+                                { {all: 'Todas', answered: 'Respondidas', unanswered: 'Não Respondidas', flagged: 'Sinalizadas'}[status] }
+                            </button>
+                        ))}
                     </div>
-                </form>
+                </div>
 
-                <div>
-                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Navegar por Domínio</h3>
-                    <div className="flex flex-wrap gap-2 mb-4">
+
+                <div className="mb-4">
+                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filtrar por Domínio</h3>
+                    <div className="flex flex-wrap gap-2">
                         {domains.map(domain => (
                             <button 
                                 key={domain} 
@@ -151,28 +188,26 @@ const QuestionJumpModal: React.FC<{
                             </button>
                         ))}
                     </div>
+                </div>
 
-                    {selectedDomain && (
-                        <div className="p-4 bg-gray-100 dark:bg-slate-800/50 rounded-md border border-gray-200 dark:border-slate-700 max-h-48 overflow-y-auto">
-                             <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-2">Questões em "{selectedDomain}"</h4>
-                             <div className="grid grid-cols-6 gap-2">
-                                {questions.map((q, index) => {
-                                    if (q.domain === selectedDomain) {
-                                        return (
-                                            <button 
-                                                key={q.id}
-                                                onClick={() => onJump(index)}
-                                                className="flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-cyan-500 hover:text-black"
-                                            >
-                                                {index + 1}
-                                            </button>
-                                        )
-                                    }
-                                    return null;
-                                })}
-                             </div>
-                        </div>
-                    )}
+                <div className="p-4 bg-gray-100 dark:bg-slate-800/50 rounded-md border border-gray-200 dark:border-slate-700 max-h-60 overflow-y-auto">
+                     <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
+                        {filteredQuestions.map(({ question, originalIndex }) => {
+                             const isAnswered = answered.includes(question.id);
+                             const isFlagged = flagged.includes(question.id);
+                            return (
+                                <button 
+                                    key={question.id}
+                                    onClick={() => onJump(originalIndex)}
+                                    className={`relative flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm border bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-cyan-400 hover:text-black ${isFlagged ? 'border-amber-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                >
+                                    {originalIndex + 1}
+                                    {isAnswered && !isFlagged && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-green-500"></span>}
+                                </button>
+                            );
+                        })}
+                     </div>
+                     {filteredQuestions.length === 0 && <p className="text-center text-gray-500 dark:text-gray-400">Nenhuma questão encontrada com os filtros selecionados.</p>}
                 </div>
             </div>
         </div>
@@ -183,10 +218,11 @@ const QuestionNavigator: React.FC<{
     questions: Question[];
     current: number;
     answered: string[];
+    flagged: string[];
     onJump: (index: number) => void;
     onOpenJumpModal: () => void;
     onReorder: (dragIndex: number, dropIndex: number) => void;
-}> = ({ questions, current, answered, onJump, onOpenJumpModal, onReorder }) => {
+}> = ({ questions, current, answered, flagged, onJump, onOpenJumpModal, onReorder }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -204,7 +240,6 @@ const QuestionNavigator: React.FC<{
     }, [questions, searchQuery]);
 
     const isSearchActive = searchQuery.trim() !== '';
-
 
     const handleDragStart = (e: React.DragEvent<HTMLButtonElement>, index: number) => {
         if (isSearchActive) {
@@ -264,10 +299,11 @@ const QuestionNavigator: React.FC<{
                 {filteredQuestions.map(({ question, originalIndex }) => {
                     const isAnswered = answered.includes(question.id);
                     const isCurrent = originalIndex === current;
+                    const isFlagged = flagged.includes(question.id);
                     const isDragging = draggingIndex === originalIndex;
                     const isDragOver = dragOverIndex === originalIndex && draggingIndex !== originalIndex;
 
-                    let buttonClass = `border border-gray-300 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 ${isSearchActive ? 'cursor-pointer' : 'cursor-grab'}`;
+                    let buttonClass = `border text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 ${isSearchActive ? 'cursor-pointer' : 'cursor-grab'} ${isFlagged ? 'border-amber-500' : 'border-gray-300 dark:border-slate-700'}`;
                     
                     if (isCurrent) {
                         buttonClass = `bg-cyan-400 border-cyan-400 text-black font-bold ${isSearchActive ? 'cursor-pointer' : 'cursor-grab'}`;
@@ -297,7 +333,7 @@ const QuestionNavigator: React.FC<{
                             aria-current={isCurrent ? 'page' : undefined}
                         >
                             {originalIndex + 1}
-                            {isAnswered && (
+                            {isAnswered && !isFlagged && (
                                 <span className="absolute top-1.5 right-1.5 block h-2 w-2 rounded-full bg-green-500" title="Respondida"></span>
                             )}
                         </button>
@@ -325,6 +361,7 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
     const [isReadingMode, setIsReadingMode] = useState(false);
     const [currentQuestionTitle, setCurrentQuestionTitle] = useState('');
     const [isTitleLoading, setIsTitleLoading] = useState(false);
+    const [flaggedQuestions, setFlaggedQuestions] = useState<string[]>([]);
     
     const titleCache = useRef<Map<string, string>>(new Map());
     const isMountedRef = useRef(true);
@@ -334,13 +371,16 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
         if (savedProgressRaw) {
             try {
                 const savedProgress = JSON.parse(savedProgressRaw);
-                if (savedProgress.examData?.examCode === examData.examCode && savedProgress.orderedQuestionIds) {
-                    const idOrder: string[] = savedProgress.orderedQuestionIds;
-                    const questionMap = new Map(examData.questions.map(q => [q.id, q]));
-                    const savedOrder = idOrder.map(id => questionMap.get(id)).filter((q): q is Question => !!q);
-                    
-                    if (savedOrder.length === examData.questions.length) {
-                        return savedOrder;
+                if (savedProgress.examData?.examCode === examData.examCode) {
+                    setFlaggedQuestions(savedProgress.flaggedQuestions || []);
+                    if (savedProgress.orderedQuestionIds) {
+                        const idOrder: string[] = savedProgress.orderedQuestionIds;
+                        const questionMap = new Map(examData.questions.map(q => [q.id, q]));
+                        const savedOrder = idOrder.map(id => questionMap.get(id)).filter((q): q is Question => !!q);
+                        
+                        if (savedOrder.length === examData.questions.length) {
+                            return savedOrder;
+                        }
                     }
                 }
             } catch (e) {
@@ -406,11 +446,12 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
             userAnswers: answers,
             timeLeft: timeLeft,
             orderedQuestionIds: orderedQuestions.map(q => q.id),
+            flaggedQuestions: flaggedQuestions,
             attempts: attempts,
         };
         localStorage.setItem('cortexExamProgress', JSON.stringify(progressToSave));
 
-    }, [answers, timeLeft, orderedQuestions, examData, attempts]);
+    }, [answers, timeLeft, orderedQuestions, examData, attempts, flaggedQuestions]);
 
 
     const playWarningSound = () => {
@@ -472,6 +513,15 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
             ...prev,
             [orderedQuestions[currentQuestionIndex].id]: answer,
         }));
+    };
+    
+    const handleToggleFlag = () => {
+        const questionId = orderedQuestions[currentQuestionIndex].id;
+        setFlaggedQuestions(prev => 
+            prev.includes(questionId) 
+                ? prev.filter(id => id !== questionId)
+                : [...prev, questionId]
+        );
     };
 
     const navigateToQuestionWithAnimation = (index: number) => {
@@ -568,6 +618,8 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                                 totalQuestions={orderedQuestions.length}
                                 title={currentQuestionTitle}
                                 isTitleLoading={isTitleLoading}
+                                isFlagged={flaggedQuestions.includes(currentQuestion.id)}
+                                onToggleFlag={handleToggleFlag}
                             />}
                         </div>
 
@@ -594,6 +646,7 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                                 questions={orderedQuestions}
                                 current={currentQuestionIndex}
                                 answered={Object.keys(answers).filter(key => answers[key] && answers[key].length > 0)}
+                                flagged={flaggedQuestions}
                                 onJump={handleJumpToQuestion}
                                 onOpenJumpModal={() => setIsJumpModalOpen(true)}
                                 onReorder={handleReorder}
@@ -607,6 +660,8 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
                 onClose={() => setIsJumpModalOpen(false)}
                 onJump={handleJumpFromModal}
                 questions={orderedQuestions}
+                answered={Object.keys(answers).filter(key => answers[key] && answers[key].length > 0)}
+                flagged={flaggedQuestions}
             />
         </>
     );

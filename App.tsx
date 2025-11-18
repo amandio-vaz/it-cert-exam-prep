@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppState, ExamData, Attempt, Question, UserAnswer, UploadedFile, User } from './types';
 import { generateExam, generateStudyPlan, analyzeImageWithGemini } from './services/geminiService';
@@ -85,11 +86,27 @@ const App: React.FC = () => {
         // Mock login: Em um app real, isso faria uma chamada de API.
         const mockUser: User = { id: `user_${Date.now()}`, email: email };
         setUser(mockUser);
+
+        // Carrega as tentativas para este usuário
+        const savedUserDataRaw = localStorage.getItem(`cortexUserData_${email}`);
+        if (savedUserDataRaw) {
+            try {
+                const savedUserData = JSON.parse(savedUserDataRaw);
+                setAttempts(savedUserData.attempts || []);
+            } catch (e) {
+                console.error("Falha ao carregar dados do usuário:", e);
+                setAttempts([]);
+            }
+        } else {
+            setAttempts([]);
+        }
+
         setAppState('config');
     };
 
     const handleLogout = () => {
         setUser(null);
+        setAttempts([]); // Limpa as tentativas ao deslogar
         returnToConfig();
         setAppState('login');
     };
@@ -138,13 +155,13 @@ const App: React.FC = () => {
     }, [examCode, uploadedFiles, questionCount, extraTopics, attempts]);
 
     const handleFinishExam = useCallback((finalAnswers: UserAnswer) => {
-        if (!examData) return;
+        if (!examData || !user) return;
         
         let correctCount = 0;
         examData.questions.forEach(q => {
             const correct = q.correctAnswers;
-            const user = finalAnswers[q.id] || [];
-            if (correct.length === user.length && correct.every(val => user.includes(val))) {
+            const userAnswer = finalAnswers[q.id] || [];
+            if (correct.length === userAnswer.length && correct.every(val => userAnswer.includes(val))) {
                 correctCount++;
             }
         });
@@ -157,13 +174,25 @@ const App: React.FC = () => {
             examCode: examData.examCode,
         };
         
+        const updatedAttempts = [...attempts, newAttempt];
+        setAttempts(updatedAttempts);
+
+        // Salva as tentativas atualizadas para o usuário
+        try {
+            const userDataToSave = {
+                attempts: updatedAttempts,
+            };
+            localStorage.setItem(`cortexUserData_${user.email}`, JSON.stringify(userDataToSave));
+        } catch (e) {
+            console.error("Falha ao salvar os dados do usuário:", e);
+        }
+
         setUserAnswers(finalAnswers);
         setCurrentAttempt(newAttempt);
-        setAttempts(prev => [...prev, newAttempt]);
         setAppState('results');
         localStorage.removeItem('cortexExamProgress');
 
-    }, [examData]);
+    }, [examData, user, attempts]);
     
     const handleGenerateStudyPlan = useCallback(async () => {
         if (!examData || !currentAttempt) return;
@@ -227,7 +256,6 @@ const App: React.FC = () => {
                             setExtraTopics={setExtraTopics}
                             questionCount={questionCount}
                             setQuestionCount={setQuestionCount}
-                            attempts={attempts}
                             onStartExam={handleStartExam}
                             onViewFlashcards={handleViewFlashcards}
                             error={error}

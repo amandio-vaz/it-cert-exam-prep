@@ -212,32 +212,95 @@ export const generateExam = async (
 
 
 export const generateStudyPlan = async (examData: ExamData, userAnswers: UserAnswer, attempt: Attempt): Promise<string> => {
-    const incorrectQuestions = examData.questions.filter(q => {
-        const correct = q.correctAnswers;
-        const user = userAnswers[q.id] || [];
-        return !(correct.length === user.length && correct.every(val => user.includes(val)));
-    });
+    // Agrupa as questões por domínio e calcula o desempenho
+    const domainPerformance = examData.questions.reduce((acc, q) => {
+        const domain = q.domain || 'Geral';
+        if (!acc[domain]) {
+            acc[domain] = { total: 0, correct: 0, incorrectQuestions: [] as string[] };
+        }
+        acc[domain].total++;
+        const userAnswer = userAnswers[q.id] || [];
+        const isCorrect = q.correctAnswers.length === userAnswer.length && q.correctAnswers.every(val => userAnswer.includes(val));
+        
+        if (isCorrect) {
+            acc[domain].correct++;
+        } else {
+            acc[domain].incorrectQuestions.push(q.text);
+        }
+        return acc;
+    }, {} as Record<string, { total: number; correct: number; incorrectQuestions: string[] }>);
+
+    // Formata o resumo de desempenho para a tabela Markdown
+    const performanceSummary = Object.entries(domainPerformance)
+        .map(([domain, data]) => {
+            const score = data.total > 0 ? (data.correct / data.total) * 100 : 0;
+            return `| ${domain} | ${data.correct}/${data.total} | ${score.toFixed(1)}% |`;
+        })
+        .join('\n');
+
+    const incorrectQuestionsByDomain = Object.entries(domainPerformance)
+        .filter(([, data]) => data.incorrectQuestions.length > 0)
+        .map(([domain, data]) => {
+            return `**${domain}**:\n${data.incorrectQuestions.map(q => `- "${q}"`).join('\n')}`;
+        })
+        .join('\n\n');
 
     const prompt = `
-    Com base no meu desempenho neste exame simulado, crie um plano de estudos detalhado e acionável.
+Você é um coach de certificação de TI de elite. Sua tarefa é criar um plano de estudos **excepcionalmente detalhado, visualmente atraente e altamente acionável** com base no desempenho do usuário em um exame simulado. A resposta deve ser formatada em **Markdown avançado**, usando emojis, tabelas, negrito e listas para máxima clareza e engajamento.
 
-    **Exame:** ${examData.examName} (${examData.examCode})
-    **Pontuação:** ${attempt.score.toFixed(2)}% (${attempt.correctAnswers}/${attempt.totalQuestions} corretas)
+---
 
-    **Questões que errei:**
-    ${incorrectQuestions.map(q => `- **Domínio: ${q.domain}** - Pergunta: "${q.text}"`).join('\n')}
+### **Análise de Desempenho: ${examData.examName} (${examData.examCode})**
 
-    **Sua tarefa:**
-    1.  **Análise de Desempenho:** Identifique meus pontos fracos com base nos domínios das questões que errei.
-    2.  **Plano de Estudos Estruturado:** Crie um plano de estudos priorizado. Sugira uma ordem de estudo, focando primeiro nas áreas mais fracas.
-    3.  **Recomendações Acionáveis:** Para cada área fraca, forneça recomendações específicas, como:
-        - "Crie flashcards para estes 10 conceitos chave."
-        - "Leia e teste todos os comandos na seção 'X' da documentação oficial."
-        - "Faça outro simulado de 20 questões focando apenas em segurança."
-    4.  **Mapeamento de Recursos:** Se possível, relacione os tópicos a serem revisados com fontes de documentação oficial (use o Google Search para encontrar links relevantes).
+-   **🎯 Pontuação Geral:** **${attempt.score.toFixed(1)}%** (${attempt.correctAnswers}/${attempt.totalQuestions} corretas)
+-   **⭐ Status:** ${attempt.score >= 70 ? 'Aprovado! 🎉 Ótimo trabalho! Use este plano para refinar seu conhecimento.' : 'Reprovado. 🧗‍♂️ Sem problemas, este é um passo crucial no aprendizado! Vamos focar nos pontos fracos.'}
 
-    Seja claro, profissional e motivador. Use marcações (markdown) para formatar a resposta de forma organizada.
-    `;
+**Resumo por Domínio:**
+
+| Domínio | Desempenho | Pontuação |
+| :--- | :---: | :---: |
+${performanceSummary}
+
+---
+
+### **Plano de Ação Personalizado 🚀**
+
+Com base na sua análise, aqui está um plano de estudos estruturado para transformar suas áreas fracas em pontos fortes e garantir seu sucesso na certificação.
+
+#### **Fase 1: Foco nos Fundamentos (Prioridade Máxima)**
+
+Concentre-se nos domínios com pontuação **abaixo de 70%**. Para cada um desses domínios, faça o seguinte:
+1.  Crie um cabeçalho com o nome do domínio, um emoji  कमजोर e a pontuação.
+2.  Liste os **conceitos-chave** que precisam ser revisados, inferindo-os a partir das perguntas erradas listadas aqui:
+    ${incorrectQuestionsByDomain}
+3.  Crie uma lista de **Tarefas Acionáveis** com caixas de seleção Markdown (\`[ ]\`), incluindo:
+    - Uma tarefa de **Laboratório Prático** específica e detalhada (2-3 horas).
+    - Duas a três recomendações de **Leitura Dirigida**, usando o Google Search para encontrar links para a **documentação oficial** ou artigos técnicos relevantes.
+    - Uma sugestão para criar de 5 a 10 **Flashcards** para os termos mais importantes.
+    - Uma recomendação para fazer um **Micro-Simulado** focado apenas nesse domínio.
+
+#### **Fase 2: Reforço e Polimento (Prioridade Média)**
+
+Para os domínios com pontuação **entre 70% e 90%**, faça o seguinte:
+1.  Crie um cabeçalho com o nome do domínio, um emoji 💪 e a pontuação.
+2.  Sugira duas **Tarefas Acionáveis**:
+    - Uma tarefa de **Revisão Ativa** (ex: explicar conceitos em voz alta).
+    - Um **Recurso Avançado**, usando o Google Search para encontrar um vídeo ou tutorial aprofundado sobre um tópico complexo do domínio.
+
+#### **Fase 3: Manutenção do Conhecimento (Prioridade Baixa)**
+
+Para domínios com pontuação **acima de 90%**, apenas liste-os com um emoji ✅ e uma mensagem de parabéns.
+
+---
+
+### **Próximos Passos e Dicas de Mestre 🏆**
+
+1.  **🗓️ Agendamento:** Reserve blocos de estudo de 60-90 minutos no seu calendário, seguindo as prioridades acima. A consistência é a chave.
+2.  **✍️ Anotações Ativas:** Não apenas leia ou assista. **Escreva, desenhe diagramas de arquitetura e crie mapas mentais.** O aprendizado ativo aumenta a retenção.
+3.  **🔁 Ciclo de Feedback:** Faça um novo simulado completo em 7-10 dias para medir seu progresso e ajustar o plano.
+
+**Lembre-se: o objetivo dos simulados não é apenas passar, mas sim identificar lacunas de conhecimento. Você está no caminho certo!**
+`;
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
