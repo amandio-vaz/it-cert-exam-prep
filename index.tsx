@@ -1,6 +1,5 @@
 
 
-
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -45,10 +44,14 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     console.error("Erro capturado por ErrorBoundary:", error, errorInfo);
   }
 
+  // Fix: Convert to arrow function to automatically bind `this`
   handleRetry = () => {
+    // Fix: Explicitly cast 'this' to React.Component type to resolve TypeScript error regarding 'props' and 'setState'.
+    // This workaround addresses potential environment-specific type resolution issues.
+    const self = this as React.Component<ErrorBoundaryProps, ErrorBoundaryState>;
     // Use the navigate function from props to go to the root path
-    this.props.navigate('/'); 
-    this.setState({ hasError: false, error: null });
+    self.props.navigate('/'); 
+    self.setState({ hasError: false, error: null });
   };
 
   render() {
@@ -75,7 +78,9 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
-    return this.props.children;
+    // Fix: Explicitly cast 'this' to React.Component type to resolve TypeScript error regarding 'props'.
+    // This workaround addresses potential environment-specific type resolution issues.
+    return (this as React.Component<ErrorBoundaryProps, ErrorBoundaryState>).props.children;
   }
 }
 

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'; // Import React Router hooks and components
 import { ExamData, Attempt, Question, UserAnswer, UploadedFile, User } from './types';
@@ -13,11 +15,10 @@ import ImageAnalyzerView from './components/ImageAnalyzerView';
 import LoadingIndicator from './components/LoadingIndicator';
 import ReviewView from './components/ReviewView';
 import FlashcardView from './components/FlashcardView';
-import LoginView from './components/LoginView';
+import LoginView from '@/components/Login/LoginView'; // Explicitly add .tsx extension
 import AttemptHistoryView from './components/AttemptHistoryView';
 import AttemptDetailsView from './components/AttemptDetailsView';
 import Sidebar from './components/Sidebar';
-import RegisterView from './components/RegisterView'; // Import RegisterView
 
 
 const App: React.FC = () => {
@@ -40,6 +41,12 @@ const App: React.FC = () => {
     const [questionsToReview, setQuestionsToReview] = useState<Question[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [initialTimeLeft, setInitialTimeLeft] = useState<number | null>(null);
+    // NOVOS ESTADOS PARA RESTAURAÇÃO DE PROGRESSO
+    const [initialCurrentQuestionIndex, setInitialCurrentQuestionIndex] = useState<number | null>(null);
+    const [initialOrderedQuestions, setInitialOrderedQuestions] = useState<Question[] | null>(null);
+    const [initialFlaggedQuestions, setInitialFlaggedQuestions] = useState<string[] | null>(null);
+
+
     const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
     const [generationStatus, setGenerationStatus] = useState<string>('');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Novo estado para o sidebar
@@ -69,13 +76,6 @@ const App: React.FC = () => {
                 console.error("Failed to parse stored user:", e);
                 localStorage.removeItem('cortexCurrentUser');
             }
-        } else {
-            // If no user is logged in, and not already on login/register page,
-            // the conditional rendering below will handle showing the login page.
-            // Explicit navigation here is removed to prevent security errors in restricted environments.
-            // if (location.pathname !== '/login' && location.pathname !== '/register') {
-            //     navigate('/login');
-            // }
         }
     }, []); // Run only once on mount to restore session
 
@@ -101,77 +101,95 @@ const App: React.FC = () => {
         const savedProgress = localStorage.getItem('cortexExamProgress');
         if (user && savedProgress) { // Only attempt to restore if a user is logged in
             try {
-                const { appState: savedAppState, examData: savedExamData, userAnswers: savedUserAnswers, timeLeft: savedTimeLeft, attempts: savedAttempts, orderedQuestionIds: savedOrderedQuestionIds, flaggedQuestions: savedFlaggedQuestions } = JSON.parse(savedProgress);
+                const { 
+                    appState: savedAppState, 
+                    examData: savedExamData, 
+                    userAnswers: savedUserAnswers, 
+                    timeLeft: savedTimeLeft, 
+                    attempts: savedAttempts, 
+                    orderedQuestionIds: savedOrderedQuestionIds, 
+                    flaggedQuestions: savedFlaggedQuestions, 
+                    currentQuestionIndex: savedCurrentQuestionIndex 
+                } = JSON.parse(savedProgress);
 
                 if (savedAppState === 'taking_exam' && savedExamData && savedUserAnswers && savedTimeLeft > 0) {
                     if (window.confirm('Encontramos um exame em andamento. Deseja continuar de onde parou?')) {
-                        // `user` is already set by the initial useEffect, so no need to mock login again
-                        setExamData(savedExamData);
+                        
+                        let restoredOrderedQuestions = savedExamData.questions;
+                        if (savedOrderedQuestionIds && savedOrderedQuestionIds.length === savedExamData.questions.length) {
+                            const questionMap = new Map(savedExamData.questions.map((q: Question) => [q.id, q]));
+                            const reorderedQuestions = savedOrderedQuestionIds.map((id: string) => questionMap.get(id)).filter((q: Question | undefined): q is Question => !!q);
+                            if (reorderedQuestions.length === savedExamData.questions.length) { // Ensure all questions were found and reordered
+                                restoredOrderedQuestions = reorderedQuestions;
+                            }
+                        }
+
+                        setExamData(savedExamData); // Use the original examData, `ExamView` will handle reordering if `initialOrderedQuestions` is passed
                         setUserAnswers(savedUserAnswers);
                         setAttempts(savedAttempts || []);
                         setInitialTimeLeft(savedTimeLeft);
+                        setInitialCurrentQuestionIndex(savedCurrentQuestionIndex !== undefined ? savedCurrentQuestionIndex : 0);
+                        setInitialOrderedQuestions(restoredOrderedQuestions);
+                        setInitialFlaggedQuestions(savedFlaggedQuestions || []);
+
                         navigate('/exam'); 
                     } else {
                         localStorage.removeItem('cortexExamProgress');
+                        // Clear initial states if user chooses not to resume
+                        setInitialCurrentQuestionIndex(null);
+                        setInitialOrderedQuestions(null);
+                        setInitialFlaggedQuestions(null);
                     }
                 }
             } catch (error) {
                 console.error("Falha ao carregar o progresso salvo:", error);
                 localStorage.removeItem('cortexExamProgress');
+                setInitialCurrentQuestionIndex(null); // Clear on error
+                setInitialOrderedQuestions(null);
+                setInitialFlaggedQuestions(null);
             }
         }
     }, [user, navigate]); // Depend on `user` to ensure it's loaded before checking progress
 
-    // ===== Mock Authentication Handlers =====
-    const handleLogin = useCallback((email: string, password: string) => {
-        const registeredUsersRaw = localStorage.getItem('cortexRegisteredUsers');
-        const registeredUsers = registeredUsersRaw ? JSON.parse(registeredUsersRaw) : {};
+    // ===== Mock Authentication Handlers (email-based, no password) =====
+    const handleLogin = useCallback((email: string) => {
+        setError(null); // Clear previous errors
+        let registeredUsersRaw = localStorage.getItem('cortexRegisteredUsers');
+        // Fix: Explicitly type registeredUsers to ensure correct type inference for User objects
+        let registeredUsers: { [key: string]: User } = registeredUsersRaw ? JSON.parse(registeredUsersRaw) : {};
 
-        const foundUser = Object.values(registeredUsers).find((u: any) => u.email === email && u.password === password);
+        let foundUser: User | undefined = Object.values(registeredUsers).find((u: User) => u.email === email);
+        let currentUser: User;
 
         if (foundUser) {
-            const mockUser: User = { id: (foundUser as any).id, email: email };
-            setUser(mockUser);
-            localStorage.setItem('cortexCurrentUser', JSON.stringify(mockUser));
+            currentUser = { id: foundUser.id, email: email };
+            console.log(`Usuário existente logado: ${email}`);
+        } else {
+            // Implicit registration: create new user if email not found
+            const newUserId = `user_${Date.now()}`;
+            const newUser: User = { id: newUserId, email: email };
+            registeredUsers[newUserId] = newUser;
+            localStorage.setItem('cortexRegisteredUsers', JSON.stringify(registeredUsers));
+            currentUser = newUser;
+            console.log(`Novo usuário criado (registro implícito): ${email}`);
+        }
 
-            const savedUserDataRaw = localStorage.getItem(`cortexUserData_${mockUser.id}`);
-            if (savedUserDataRaw) {
-                try {
-                    const savedUserData = JSON.parse(savedUserDataRaw);
-                    setAttempts(savedUserData.attempts || []);
-                } catch (e) {
-                    console.error("Falha ao carregar dados do usuário:", e);
-                    setAttempts([]);
-                }
-            } else {
+        setUser(currentUser);
+        localStorage.setItem('cortexCurrentUser', JSON.stringify(currentUser));
+
+        // Load attempts for this user (or initialize empty for new user)
+        const savedUserDataRaw = localStorage.getItem(`cortexUserData_${currentUser.id}`);
+        if (savedUserDataRaw) {
+            try {
+                const savedUserData = JSON.parse(savedUserDataRaw);
+                setAttempts(savedUserData.attempts || []);
+            } catch (e) {
+                console.error("Falha ao carregar dados do usuário:", e);
                 setAttempts([]);
             }
-            navigate('/');
-            return true;
         } else {
-            setError('Email ou senha inválidos.');
-            return false;
+            setAttempts([]);
         }
-    }, [navigate]);
-
-    const handleRegister = useCallback((email: string, password: string) => {
-        const registeredUsersRaw = localStorage.getItem('cortexRegisteredUsers');
-        const registeredUsers = registeredUsersRaw ? JSON.parse(registeredUsersRaw) : {};
-
-        if (Object.values(registeredUsers).some((u: any) => u.email === email)) {
-            setError('Este email já está registrado.');
-            return false;
-        }
-
-        const newUserId = `user_${Date.now()}`;
-        const newUser = { id: newUserId, email: email, password: password };
-        registeredUsers[newUserId] = newUser;
-        localStorage.setItem('cortexRegisteredUsers', JSON.stringify(registeredUsers));
-
-        const mockUser: User = { id: newUserId, email: email };
-        setUser(mockUser);
-        localStorage.setItem('cortexCurrentUser', JSON.stringify(mockUser));
-        setAttempts([]); // New user, no previous attempts
         navigate('/');
         return true;
     }, [navigate]);
@@ -204,7 +222,12 @@ const App: React.FC = () => {
             return;
         }
         setError(null);
-        localStorage.removeItem('cortexExamProgress');
+        localStorage.removeItem('cortexExamProgress'); // Always clear previous progress on new exam start
+        setInitialCurrentQuestionIndex(null); // Clear initial states
+        setInitialOrderedQuestions(null);
+        setInitialFlaggedQuestions(null);
+
+
         setGenerationStatus("Iniciando a geração do seu exame...");
         try {
             const onStatusUpdate = (status: string) => {
@@ -213,18 +236,26 @@ const App: React.FC = () => {
 
             const exam = await generateExam(uploadedFiles, examCode, questionCount, extraTopics, onStatusUpdate, language);
             
+            // Initial progress for a new exam
             const initialProgress = {
-                appState: 'taking_exam', // Still needed for local storage to identify the state
+                appState: 'taking_exam',
                 examData: exam,
                 userAnswers: {},
                 timeLeft: exam.questions.length * 90, // 90 seconds per question
+                currentQuestionIndex: 0, // Start at the first question
+                orderedQuestionIds: exam.questions.map(q => q.id), // Default order
+                flaggedQuestions: [], // No questions flagged initially
                 attempts: attempts
             };
             localStorage.setItem('cortexExamProgress', JSON.stringify(initialProgress));
             
             setExamData(exam);
             setUserAnswers({});
-            setInitialTimeLeft(null);
+            setInitialTimeLeft(null); // Let ExamView calculate its initial time based on new exam
+            setInitialCurrentQuestionIndex(0); // For a fresh start
+            setInitialOrderedQuestions(exam.questions); // For a fresh start
+            setInitialFlaggedQuestions([]); // For a fresh start
+
             closeSidebar(); // Fecha o sidebar após iniciar o exame
             navigate('/exam'); // Navigate to exam view
         } catch (e) {
@@ -285,7 +316,10 @@ const App: React.FC = () => {
         setCurrentAttempt(newAttempt);
         closeSidebar(); // Fecha o sidebar
         navigate('/results'); // Navigate to results view
-        localStorage.removeItem('cortexExamProgress');
+        localStorage.removeItem('cortexExamProgress'); // Clear progress after finishing
+        setInitialCurrentQuestionIndex(null); // Clear initial states after finishing
+        setInitialOrderedQuestions(null);
+        setInitialFlaggedQuestions(null);
 
     }, [examData, user, attempts, navigate, closeSidebar]);
     
@@ -376,7 +410,7 @@ const App: React.FC = () => {
 
 
     // Re-enabled: Authentication gate
-    if (!user && location.pathname !== '/login' && location.pathname !== '/register') {
+    if (!user && location.pathname !== '/login') { // Only check for /login path now
         return <LoginView onLogin={handleLogin} />;
     }
 
@@ -418,7 +452,6 @@ const App: React.FC = () => {
                     {!generationStatus && ( // Render routes only when not generating
                         <Routes>
                             <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
-                            <Route path="/register" element={<RegisterView onRegister={handleRegister} />} />
                             <Route path="/" element={
                                 user ? ( // Protect routes that require authentication
                                     <ConfigView
@@ -449,6 +482,9 @@ const App: React.FC = () => {
                                         initialAnswers={userAnswers}
                                         initialTimeLeft={initialTimeLeft}
                                         attempts={attempts}
+                                        initialQuestionIndex={initialCurrentQuestionIndex} // Pass restored current question index
+                                        initialOrderedQuestions={initialOrderedQuestions} // Pass restored question order
+                                        initialFlaggedQuestions={initialFlaggedQuestions} // Pass restored flagged questions
                                     />
                                 ) : (
                                     <div className="text-center text-red-500 dark:text-red-400">Nenhum exame carregado ou usuário não autenticado. Volte para a configuração.</div>

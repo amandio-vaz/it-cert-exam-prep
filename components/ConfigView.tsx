@@ -2,7 +2,7 @@
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { UploadedFile, Attempt } from '../types';
 import { fileToArrayBuffer, uint8ArrayToBase64 } from '../utils/fileUtils';
-import { CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon, ChartBarIcon, PhotoIcon } from './icons';
+import { CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon, ChartBarIcon, PhotoIcon, MicrophoneIcon } from './icons';
 import { PDFDocument } from 'pdf-lib';
 import { ALL_EXAM_CODES, POPULAR_EXAMS } from '../data/examCodes';
 
@@ -75,6 +75,10 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<string[]>([]);
     const [isAutocompleteVisible, setIsAutocompleteVisible] = useState(false);
     const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
+    const [isListening, setIsListening] = useState(false); // State for voice input
+    // Fix: Replace undeclared SpeechRecognition type with 'any' to resolve "Cannot find name" error.
+    const recognitionRef = useRef<any | null>(null); // Ref for SpeechRecognition instance
+    const voiceInputSupported = useRef(false); // To check if Web Speech API is supported
     
     const autocompleteRef = useRef<HTMLDivElement>(null);
     const isMountedRef = useRef(true); 
@@ -110,6 +114,54 @@ const ConfigView: React.FC<ConfigViewProps> = ({
             setHasFlashcards(false);
         }
     }, []);
+
+    // Effect for SpeechRecognition setup and cleanup
+    useEffect(() => {
+        if (!('webkitSpeechRecognition' in window)) {
+            console.warn("Web Speech API not supported by this browser. Voice input disabled.");
+            voiceInputSupported.current = false;
+            return; // Exit if not supported
+        }
+        voiceInputSupported.current = true;
+
+        const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false; // For single phrases
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = language === 'pt-BR' ? 'pt-BR' : 'en-US'; // Set language dynamically
+
+        // Fix: Replace undeclared SpeechRecognitionEvent type with 'any' to resolve "Cannot find name" error.
+        recognitionRef.current.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            if (isMountedRef.current) {
+                // Basic formatting: convert to uppercase and replace spaces with hyphens
+                // e.g., "az nine hundred" -> "AZ-900"
+                setExamCode(transcript.toUpperCase().replace(/\s/g, '-')); 
+                setIsListening(false);
+            }
+        };
+
+        // Fix: Replace undeclared SpeechRecognitionErrorEvent type with 'any' to resolve "Cannot find name" error.
+        recognitionRef.current.onerror = (event: any) => {
+            console.error("Speech recognition error:", event.error);
+            if (isMountedRef.current) {
+                setFileErrors(prev => [...prev, `Erro de reconhecimento de voz: ${event.error}.`]);
+                setIsListening(false);
+            }
+        };
+
+        recognitionRef.current.onend = () => {
+            if (isMountedRef.current) {
+                setIsListening(false);
+            }
+        };
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, [language, setExamCode, setFileErrors]); // Re-initialize if language or setExamCode/setFileErrors change
 
     // Helper function to read file with progress tracking
     const readFileWithProgress = useCallback((file: File, asArrayBuffer: boolean): Promise<string | ArrayBuffer> => {
@@ -323,6 +375,29 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         }
     };
     
+    const handleVoiceInput = () => {
+        if (!recognitionRef.current || !voiceInputSupported.current) {
+            setFileErrors(prev => [...prev, "Recurso de reconhecimento de voz não disponível neste navegador."]);
+            return;
+        }
+
+        if (isListening) {
+            recognitionRef.current.stop();
+            setIsListening(false);
+        } else {
+            setFileErrors([]); // Clear previous voice-related errors
+            try {
+                recognitionRef.current.lang = language === 'pt-BR' ? 'pt-BR' : 'en-US'; // Ensure language is up-to-date
+                recognitionRef.current.start();
+                setIsListening(true);
+            } catch (e) {
+                console.error("Error starting speech recognition:", e);
+                setFileErrors(prev => [...prev, `Falha ao iniciar o reconhecimento de voz. Certifique-se de que o microfone está disponível e as permissões foram concedidas. ${e instanceof Error ? e.message : String(e)}`]);
+                setIsListening(false);
+            }
+        }
+    };
+
     const canStart = examCode.trim() !== '' && uploadedFiles.length > 0 && processingFiles.length === 0;
 
     // Lógica para o verificador ortográfico
@@ -498,6 +573,18 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                                     </li>
                                 ))}
                             </ul>
+                        )}
+                        {voiceInputSupported.current && (
+                            <button
+                                onClick={handleVoiceInput}
+                                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-gray-400 hover:bg-slate-700 hover:text-white transition-colors
+                                    ${isListening ? 'bg-violet-600/30 text-violet-400 animate-pulse' : ''}`}
+                                aria-label={isListening ? "Parar entrada de voz" : "Iniciar entrada de voz para código do exame"}
+                                title={isListening ? "Parar entrada de voz" : "Falar código do exame"}
+                                disabled={!voiceInputSupported.current}
+                            >
+                                <MicrophoneIcon className="w-5 h-5" />
+                            </button>
                         )}
                     </div>
                 </div>

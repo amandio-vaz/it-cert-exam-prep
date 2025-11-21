@@ -210,3 +210,10 @@ export const ArrowRightLeftIcon: React.FC<IconProps> = (props) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12H12M17.25 9.75V12a2.25 2.25 0 01-2.25 2.25H12c-.621 0-1.125-.504-1.125-1.125V9.75M7.5 7.5l-2.25 2.25M5.25 9.75H12M9.75 7.5v6.75M9.75 16.5v2.25m0-13.5v-2.25" />
   </svg>
 );
+
+export const MicrophoneIcon: React.FC<IconProps> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a7.5 7.5 0 006.598-11.25c-1.357-1.614-3.57-2.73-6.598-2.73S6.759 5.906 5.402 7.5C4.045 9.094 3 11.006 3 13.125v1.257c0 1.05.748 1.839 1.748 2.378l.498.249c.928.464 2.112.464 3.04 0l.498-.249c.996-.54 1.748-1.328 1.748-2.378V13.125c0-2.119-.945-4.031-2.296-5.625-1.35-1.6-3.572-2.73-6.598-2.73S6.759 5.906 5.402 7.5M12 18.75v3M12 21.75a.75.75 0 01-.75-.75V21a.75.75 0 011.5 0v.75a.75.75 0 01-.75.75z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10 20.25h4" />
+  </svg>
+);

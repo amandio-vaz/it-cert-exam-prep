@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
 import { generateQuestionTitle } from '../services/geminiService';
@@ -12,6 +11,9 @@ interface ExamViewProps {
     initialAnswers?: UserAnswer;
     initialTimeLeft?: number | null;
     attempts: Attempt[]; // Adicionado: histórico de tentativas para salvar no progresso
+    initialQuestionIndex?: number | null; // NOVO: Índice da questão a ser restaurada
+    initialOrderedQuestions?: Question[] | null; // NOVO: Ordem das questões a ser restaurada
+    initialFlaggedQuestions?: string[] | null; // NOVO: Questões sinalizadas a serem restauradas
 }
 
 const getQuestionTypeExplanation = (type: QuestionType): string => {
@@ -371,44 +373,6 @@ const QuestionNavigator: React.FC<{
     );
 };
 
-// Initializer for orderedQuestions
-const getInitialOrderedQuestions = (examData: ExamData): Question[] => {
-    const savedProgressRaw = localStorage.getItem('cortexExamProgress');
-    if (savedProgressRaw) {
-        try {
-            const savedProgress = JSON.parse(savedProgressRaw);
-            if (savedProgress.examData?.examCode === examData.examCode && savedProgress.orderedQuestionIds) {
-                const idOrder: string[] = savedProgress.orderedQuestionIds;
-                const questionMap = new Map(examData.questions.map(q => [q.id, q]));
-                const savedOrder = idOrder.map(id => questionMap.get(id)).filter((q): q is Question => !!q);
-                
-                if (savedOrder.length === examData.questions.length) {
-                    return savedOrder;
-                }
-            }
-        } catch (e) {
-            console.error("Erro ao carregar ordem salva de questões:", e);
-        }
-    }
-    return examData.questions;
-};
-
-// Initializer for flaggedQuestions
-const getInitialFlaggedQuestions = (examData: ExamData): string[] => {
-    const savedProgressRaw = localStorage.getItem('cortexExamProgress');
-    if (savedProgressRaw) {
-        try {
-            const savedProgress = JSON.parse(savedProgressRaw);
-            if (savedProgress.examData?.examCode === examData.examCode && savedProgress.flaggedQuestions) {
-                return savedProgress.flaggedQuestions;
-            }
-        } catch (e) {
-            console.error("Erro ao carregar questões sinalizadas:", e);
-        }
-    }
-    return [];
-};
-
 // Utility function to format time
 const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
@@ -416,7 +380,16 @@ const formatTime = (seconds: number): string => {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
-const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnswers = {}, initialTimeLeft = null, attempts }) => {
+const ExamView: React.FC<ExamViewProps> = ({ 
+    examData, 
+    onFinishExam, 
+    initialAnswers = {}, 
+    initialTimeLeft = null, 
+    attempts,
+    initialQuestionIndex = null, // Valor padrão para a nova prop
+    initialOrderedQuestions = null, // Valor padrão para a nova prop
+    initialFlaggedQuestions = null, // Valor padrão para a nova prop
+}) => {
     const [answers, setAnswers] = useState<UserAnswer>(initialAnswers);
     const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
     const [animationClass, setAnimationClass] = useState('opacity-100 translate-y-0'); // Estado inicial da animação
@@ -426,15 +399,20 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
     const [currentQuestionTitle, setCurrentQuestionTitle] = useState('');
     const [isTitleLoading, setIsTitleLoading] = useState(false);
     
-    // Initialize flaggedQuestions and orderedQuestions using initializer functions
-    const [flaggedQuestions, setFlaggedQuestions] = useState<string[]>(() => getInitialFlaggedQuestions(examData));
-    const [orderedQuestions, setOrderedQuestions] = useState<Question[]>(() => getInitialOrderedQuestions(examData));
+    // Inicializa estados a partir das props ou valores padrão
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(
+        initialQuestionIndex !== null ? initialQuestionIndex : 0
+    );
+    const [orderedQuestions, setOrderedQuestions] = useState<Question[]>(
+        initialOrderedQuestions !== null ? initialOrderedQuestions : examData.questions
+    );
+    const [flaggedQuestions, setFlaggedQuestions] = useState<string[]>(
+        initialFlaggedQuestions !== null ? initialFlaggedQuestions : []
+    );
     
     const titleCache = useRef<Map<string, string>>(new Map());
     const isMountedRef = useRef(true);
     
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-
     const TIME_PER_QUESTION_SECONDS = 90;
     const totalTimeSeconds = examData.questions.length * TIME_PER_QUESTION_SECONDS;
     const [timeLeft, setTimeLeft] = useState(initialTimeLeft !== null ? initialTimeLeft : totalTimeSeconds);
@@ -518,13 +496,14 @@ const ExamView: React.FC<ExamViewProps> = ({ examData, onFinishExam, initialAnsw
             examData: examData,
             userAnswers: answers,
             timeLeft: timeLeft,
+            currentQuestionIndex: currentQuestionIndex, // ADICIONADO: Salva o índice da questão atual
             orderedQuestionIds: orderedQuestions.map(q => q.id),
             flaggedQuestions: flaggedQuestions,
             attempts: attempts,
         };
         localStorage.setItem('cortexExamProgress', JSON.stringify(progressToSave));
 
-    }, [answers, timeLeft, orderedQuestions, examData, attempts, flaggedQuestions]);
+    }, [answers, timeLeft, orderedQuestions, examData, attempts, flaggedQuestions, currentQuestionIndex]);
 
 
     const playWarningSound = () => {
