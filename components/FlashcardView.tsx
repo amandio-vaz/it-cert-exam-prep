@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Flashcard } from '../types';
 import { ArrowLeftIcon, RectangleStackIcon } from './icons';
@@ -80,12 +81,12 @@ const FlashcardView: React.FC<FlashcardViewProps> = ({ onBack }) => {
 
     return (
         <div className="max-w-2xl mx-auto flex flex-col items-center gap-6">
-            <div className="w-full flex justify-between items-center">
-                <button onClick={onBack} className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 font-semibold transition-colors">
+            <div className="w-full text-center">
+                <button onClick={onBack} className="flex items-center gap-2 mb-6 text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 font-semibold transition-colors">
                     <ArrowLeftIcon className="w-5 h-5" />
                     Voltar à Configuração
                 </button>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Revisão com Flashcards</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Revisão com Flashcards</h1>
             </div>
 
             <div className="w-full text-center text-gray-500 dark:text-gray-400 font-medium">

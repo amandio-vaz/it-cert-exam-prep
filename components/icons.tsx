@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 
 type IconProps = React.SVGProps<SVGSVGElement>;
@@ -202,4 +203,10 @@ export const DotIcon: React.FC<IconProps> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" {...props}>
         <circle cx="12" cy="12" r="6" />
     </svg>
+);
+
+export const ArrowRightLeftIcon: React.FC<IconProps> = (props) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12H12M17.25 9.75V12a2.25 2.25 0 01-2.25 2.25H12c-.621 0-1.125-.504-1.125-1.125V9.75M7.5 7.5l-2.25 2.25M5.25 9.75H12M9.75 7.5v6.75M9.75 16.5v2.25m0-13.5v-2.25" />
+  </svg>
 );

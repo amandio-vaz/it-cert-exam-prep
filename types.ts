@@ -56,7 +56,7 @@ export interface Flashcard {
 }
 
 export interface User {
-    id: string;
+    id: string; // Unique identifier for the user
     email: string;
 }
 

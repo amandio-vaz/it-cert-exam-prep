@@ -5,11 +5,15 @@ export const fileToBase64 = (file: File): Promise<string> => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => {
-            const result = reader.result as string;
-            // remove the header from the base64 string
-            resolve(result.split(',')[1]);
+            try {
+                const result = reader.result as string;
+                // remove the header from the base64 string
+                resolve(result.split(',')[1]);
+            } catch (e) {
+                reject(new Error(`Failed to process file ${file.name} to Base64: ${e instanceof Error ? e.message : String(e)}`));
+            }
         };
-        reader.onerror = error => reject(error);
+        reader.onerror = error => reject(new Error(`File reading error for ${file.name}: ${error.target?.error?.message || String(error)}`));
     });
 };
 

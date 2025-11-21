@@ -1,6 +1,6 @@
 
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { UploadedFile } from '../types';
 import { fileToBase64 } from '../utils/fileUtils';
 import LoadingIndicator from './LoadingIndicator';
@@ -19,56 +19,75 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [fileError, setFileError] = useState<string | null>(null);
+    const isMountedRef = useRef(true); // Referência para verificar se o componente está montado
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
 
     const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             // Adiciona validação para garantir que é um arquivo de imagem
             if (!file.type.startsWith('image/')) {
-                setFileError('Arquivo inválido. Por favor, selecione uma imagem (ex: PNG, JPG, WEBP).');
-                setImageFile(null);
-                setImagePreview(null);
+                if (isMountedRef.current) {
+                    setFileError('Arquivo inválido. Por favor, selecione uma imagem (ex: PNG, JPG, WEBP).');
+                    setImageFile(null);
+                    setImagePreview(null);
+                }
                 e.target.value = ''; // Reseta o input de arquivo
                 return;
             }
 
             try {
-                setFileError(null); // Limpa erros anteriores de arquivo
+                if (isMountedRef.current) {
+                    setFileError(null); // Limpa erros anteriores de arquivo
+                }
                 const content = await fileToBase64(file);
+                
+                if (!isMountedRef.current) return; // Parar se o componente foi desmontado durante a espera
+                
                 const uploadedFile = { name: file.name, type: file.type, content };
                 setImageFile(uploadedFile);
 
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                    setImagePreview(reader.result as string);
+                    if (isMountedRef.current) {
+                        setImagePreview(reader.result as string);
+                    }
                 };
                 reader.readAsDataURL(file);
 
-                setAnalysis('');
-                setError(null);
+                if (isMountedRef.current) {
+                    setAnalysis('');
+                    setError(null);
+                }
             } catch (err) {
-                setFileError("Falha ao processar a imagem.");
+                if (isMountedRef.current) {
+                    setFileError("Falha ao processar a imagem.");
+                }
             }
         }
     }, []);
 
     const handleAnalyzeClick = async () => {
         if (!imageFile || !prompt) {
-            setError("Por favor, carregue uma imagem e escreva uma pergunta.");
+            if (isMountedRef.current) setError("Por favor, carregue uma imagem e escreva uma pergunta.");
             return;
         }
         if (fileError) return;
 
-        setIsLoading(true);
-        setError(null);
-        setAnalysis('');
+        if (isMountedRef.current) setIsLoading(true);
+        if (isMountedRef.current) setError(null);
+        if (isMountedRef.current) setAnalysis('');
         try {
             const result = await onAnalyze(imageFile, prompt);
-            setAnalysis(result);
+            if (isMountedRef.current) setAnalysis(result);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Ocorreu um erro desconhecido.");
+            if (isMountedRef.current) setError(err instanceof Error ? err.message : "Ocorreu um erro desconhecido.");
         } finally {
-            setIsLoading(false);
+            if (isMountedRef.current) setIsLoading(false);
         }
     };
 

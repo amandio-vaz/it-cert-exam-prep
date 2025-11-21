@@ -1,8 +1,7 @@
 
-
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { UploadedFile, Attempt } from '../types';
-import { fileToBase64, fileToArrayBuffer, uint8ArrayToBase64 } from '../utils/fileUtils';
+import { fileToArrayBuffer, uint8ArrayToBase64 } from '../utils/fileUtils';
 import { CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon, ChartBarIcon, PhotoIcon } from './icons';
 import { PDFDocument } from 'pdf-lib';
 import { ALL_EXAM_CODES, POPULAR_EXAMS } from '../data/examCodes';
@@ -18,10 +17,16 @@ interface ConfigViewProps {
     setQuestionCount: (count: number) => void;
     onStartExam: (language: 'pt-BR' | 'en-US') => void;
     onViewFlashcards: () => void;
-    onViewAttemptHistory: () => void; // New prop for viewing attempt history
-    onViewImageAnalyzer: () => void; // New prop for image analyzer
-    attempts: Attempt[]; // New prop to check if history exists
+    onViewAttemptHistory: () => void; 
+    onViewImageAnalyzer: () => void; 
+    attempts: Attempt[]; 
     error: string | null;
+}
+
+interface ProcessingFile {
+    name: string;
+    progress: number;
+    status: 'uploading' | 'processing';
 }
 
 const MAX_FILE_SIZE_MB = 50;
@@ -58,9 +63,9 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     setQuestionCount,
     onStartExam,
     onViewFlashcards,
-    onViewAttemptHistory, // Destructure new prop
-    onViewImageAnalyzer, // Destructure new prop
-    attempts, // Destructure new prop
+    onViewAttemptHistory,
+    onViewImageAnalyzer,
+    attempts,
     error
 }) => {
     const [isDragging, setIsDragging] = useState(false);
@@ -69,8 +74,15 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     const [language, setLanguage] = useState<'pt-BR' | 'en-US'>('pt-BR');
     const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<string[]>([]);
     const [isAutocompleteVisible, setIsAutocompleteVisible] = useState(false);
+    const [processingFiles, setProcessingFiles] = useState<ProcessingFile[]>([]);
+    
     const autocompleteRef = useRef<HTMLDivElement>(null);
+    const isMountedRef = useRef(true); 
 
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -99,19 +111,66 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         }
     }, []);
 
+    // Helper function to read file with progress tracking
+    const readFileWithProgress = useCallback((file: File, asArrayBuffer: boolean): Promise<string | ArrayBuffer> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onprogress = (event) => {
+                if (event.lengthComputable && isMountedRef.current) {
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    setProcessingFiles(prev => prev.map(pf => 
+                        pf.name === file.name ? { ...pf, progress: percent } : pf
+                    ));
+                }
+            };
+
+            reader.onload = () => {
+                if (isMountedRef.current) {
+                    // Set to processing status after read is complete
+                    setProcessingFiles(prev => prev.map(pf => 
+                        pf.name === file.name ? { ...pf, progress: 100, status: 'processing' } : pf
+                    ));
+                }
+                
+                if (asArrayBuffer) {
+                    resolve(reader.result as ArrayBuffer);
+                } else {
+                    const result = reader.result as string;
+                    // remove the header from the base64 string
+                    resolve(result.split(',')[1]);
+                }
+            };
+
+            reader.onerror = (error) => reject(new Error(`File reading error: ${error.target?.error?.message || String(error)}`));
+
+            if (asArrayBuffer) {
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.readAsDataURL(file);
+            }
+        });
+    }, []);
+
     const handleFileChange = useCallback(async (files: FileList | null) => {
         if (!files) return;
-        setFileErrors([]); // Limpa erros e informações de uploads anteriores
+        setFileErrors([]); 
         
+        // Initialize processing state for new files
+        const newProcessingFiles = Array.from(files).map(f => ({ name: f.name, progress: 0, status: 'uploading' as const }));
+        setProcessingFiles(prev => [...prev, ...newProcessingFiles]);
+
         let processedFiles: UploadedFile[] = [];
         const currentErrors: string[] = [];
         let infoMessages: string[] = [];
         const PAGE_LIMIT = 1000;
 
         for (const file of Array.from(files)) {
+            // Check if we exceed limits considering currently uploaded + processed in this batch
             if (uploadedFiles.length + processedFiles.length >= MAX_FILES) {
                 currentErrors.push(`Você pode carregar no máximo ${MAX_FILES} arquivos.`);
-                break;
+                setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
+                continue;
             }
             
             const fileExtension = `.${file.name.split('.').pop()?.toLowerCase()}`;
@@ -120,23 +179,31 @@ const ConfigView: React.FC<ConfigViewProps> = ({
 
             if (!acceptedMime) {
                 currentErrors.push(`Tipo de arquivo não suportado para "${file.name}". Use PDF, MD, DOCX, HTML ou imagens.`);
+                setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
                 continue;
             }
 
-            if (file.type === 'application/pdf') {
-                if (file.size > MAX_FILE_SIZE) {
-                    currentErrors.push(`O arquivo PDF "${file.name}" excede o limite de ${MAX_FILE_SIZE_MB}MB e não será processado.`);
-                    continue;
-                }
-                try {
-                    const arrayBuffer = await fileToArrayBuffer(file);
-                    const pdfDoc = await PDFDocument.load(arrayBuffer);
+            try {
+                if (file.type === 'application/pdf') {
+                    if (file.size > MAX_FILE_SIZE) {
+                        currentErrors.push(`O arquivo PDF "${file.name}" excede o limite de ${MAX_FILE_SIZE_MB}MB e não será processado.`);
+                        setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
+                        continue;
+                    }
+
+                    // Use local helper for progress
+                    const arrayBuffer = await readFileWithProgress(file, true) as ArrayBuffer;
+                    
+                    // PDF processing logic
+                    // Explicitly set ignoreEncryption to false to ensure we catch protected files
+                    const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: false });
                     const pageCount = pdfDoc.getPageCount();
 
                     if (pageCount > PAGE_LIMIT) {
                         const numChunks = Math.ceil(pageCount / PAGE_LIMIT);
                         if (uploadedFiles.length + processedFiles.length + numChunks > MAX_FILES) {
                             currentErrors.push(`O PDF "${file.name}" precisa ser dividido em ${numChunks} partes, o que excederia o limite total de ${MAX_FILES} arquivos.`);
+                            setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
                             continue;
                         }
 
@@ -152,6 +219,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                             copiedPages.forEach(page => newPdfDoc.addPage(page));
 
                             const newPdfBytes = await newPdfDoc.save();
+                            // Reuse existing utility for internal conversion as it's not an upload
                             const base64Content = uint8ArrayToBase64(newPdfBytes);
                             
                             const chunkName = `${file.name.replace(/\.pdf$/i, '')}-parte${j + 1}.pdf`;
@@ -166,29 +234,50 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                         processedFiles.push(...newChunks);
 
                     } else {
-                        const content = await fileToBase64(file);
-                        processedFiles.push({ name: file.name, type: file.type, content });
+                        // Convert ArrayBuffer to Base64 for consistency
+                        const base64String = uint8ArrayToBase64(new Uint8Array(arrayBuffer));
+                        processedFiles.push({ name: file.name, type: file.type, content: base64String });
                     }
-                } catch (pdfError) {
-                    console.error(`Erro ao processar o PDF "${file.name}":`, pdfError);
-                    currentErrors.push(`Não foi possível processar o PDF "${file.name}". O arquivo pode estar corrompido ou protegido.`);
-                    continue;
+                } else {
+                     if (file.size > MAX_FILE_SIZE) {
+                        currentErrors.push(`O arquivo "${file.name}" é muito grande (máx ${MAX_FILE_SIZE_MB}MB).`);
+                        setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
+                        continue;
+                    }
+                    // Use local helper for progress
+                    const content = await readFileWithProgress(file, false) as string;
+                    processedFiles.push({ name: file.name, type: file.type || 'application/octet-stream', content });
                 }
-            } else {
-                 if (file.size > MAX_FILE_SIZE) {
-                    currentErrors.push(`O arquivo "${file.name}" é muito grande (máx ${MAX_FILE_SIZE_MB}MB).`);
-                    continue;
+            } catch (error: any) {
+                console.error(`Erro ao processar o arquivo "${file.name}":`, error);
+                if (!isMountedRef.current) return;
+                
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                const lowerMsg = errorMessage.toLowerCase();
+
+                if (lowerMsg.includes('encrypted') || lowerMsg.includes('password')) {
+                     currentErrors.push(`🔒 O arquivo PDF "${file.name}" está protegido por senha. Por favor, remova a senha antes de carregar.`);
+                } else if (lowerMsg.includes('invalid pdf') || lowerMsg.includes('pdf header not found')) {
+                    currentErrors.push(`⚠️ O arquivo PDF "${file.name}" parece estar corrompido ou inválido.`);
                 }
-                const content = await fileToBase64(file);
-                processedFiles.push({ name: file.name, type: file.type || 'application/octet-stream', content });
+                else {
+                    currentErrors.push(`❌ Erro ao processar "${file.name}": ${errorMessage}`);
+                }
+            } finally {
+                // Remove from processing list whether success or fail
+                if (isMountedRef.current) {
+                    setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
+                }
             }
         }
         
-        setFileErrors([...currentErrors, ...infoMessages]);
-        if (processedFiles.length > 0) {
-            setUploadedFiles(prev => [...prev, ...processedFiles].slice(0, MAX_FILES));
+        if (isMountedRef.current) {
+            setFileErrors([...currentErrors, ...infoMessages]);
+            if (processedFiles.length > 0) {
+                setUploadedFiles(prev => [...prev, ...processedFiles].slice(0, MAX_FILES));
+            }
         }
-    }, [setUploadedFiles, uploadedFiles.length]);
+    }, [setUploadedFiles, uploadedFiles.length, readFileWithProgress]);
 
     const handleExamCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -234,7 +323,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         }
     };
     
-    const canStart = examCode.trim() !== '' && uploadedFiles.length > 0;
+    const canStart = examCode.trim() !== '' && uploadedFiles.length > 0 && processingFiles.length === 0;
 
     // Lógica para o verificador ortográfico
     const spellCheckRenderer = useMemo(() => {
@@ -307,26 +396,54 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                         <div className="space-y-1">
                             {fileErrors.map((msg, index) => {
                                 const isInfo = msg.includes('foi dividido');
-                                return <p key={index} className={`text-sm ${isInfo ? 'text-cyan-400' : 'text-red-400'}`}>{msg}</p>;
+                                const isWarning = msg.includes('⚠️');
+                                const isLock = msg.includes('🔒');
+                                let colorClass = 'text-red-400';
+                                if (isInfo) colorClass = 'text-cyan-400';
+                                if (isWarning) colorClass = 'text-amber-400';
+                                if (isLock) colorClass = 'text-rose-400';
+                                
+                                return <p key={index} className={`text-sm ${colorClass}`}>{msg}</p>;
                             })}
                         </div>
                      )}
+
+                     {/* Progress Bars for Processing Files */}
+                     {processingFiles.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                            {processingFiles.map((file, index) => (
+                                <div key={`proc-${index}`} className="bg-slate-800/50 p-3 rounded-md">
+                                    <div className="flex justify-between text-sm text-gray-300 mb-1">
+                                        <span className="truncate pr-4">{file.name}</span>
+                                        <span className="text-xs font-mono text-gray-400">
+                                            {file.status === 'processing' ? 'Processando...' : `${file.progress}%`}
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                        <div 
+                                            className={`h-1.5 rounded-full transition-all duration-300 ${file.status === 'processing' ? 'bg-amber-500 animate-pulse w-full' : 'bg-cyan-500'}`} 
+                                            style={{ width: file.status === 'processing' ? '100%' : `${file.progress}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                     )}
+
+                     {/* List of Completed Uploads */}
                      {uploadedFiles.length > 0 && (
                         <div className="mt-4 flex flex-col gap-2">
                             <div className="text-sm text-gray-400 dark:text-gray-500">
                                 {uploadedFiles.length} de {MAX_FILES} arquivos carregados
                             </div>
-                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
-                                <div 
-                                    className="bg-violet-500 h-2 rounded-full transition-all duration-300" 
-                                    style={{ width: `${(uploadedFiles.length / MAX_FILES) * 100}%` }}
-                                ></div>
-                            </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {uploadedFiles.map((file, index) => (
-                                    <div key={index} className="flex items-center justify-between bg-slate-800/50 p-2 rounded-md text-sm">
-                                        <p className="truncate text-gray-300 pr-2">{file.name}</p>
-                                        <button onClick={() => setUploadedFiles(files => files.filter((_, i) => i !== index))} className="text-red-400 hover:text-red-300 font-bold text-lg px-2 flex-shrink-0">&times;</button>
+                                    <div key={index} className="flex items-center justify-between bg-slate-800/50 p-2 rounded-md text-sm border border-green-500/20">
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></div>
+                                            <p className="truncate text-gray-300">{file.name}</p>
+                                        </div>
+                                        <button onClick={() => setUploadedFiles(files => files.filter((_, i) => i !== index))} className="text-red-400 hover:text-red-300 font-bold text-lg px-2 flex-shrink-0 hover:bg-slate-700 rounded transition-colors">&times;</button>
                                     </div>
                                 ))}
                             </div>
