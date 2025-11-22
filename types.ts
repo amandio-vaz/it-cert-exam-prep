@@ -1,5 +1,4 @@
 
-
 export enum QuestionType {
   SingleChoice = "Single Choice",
   MultipleChoice = "Multiple Choice",
@@ -55,10 +54,4 @@ export interface Flashcard {
     answer: string;
 }
 
-export interface User {
-    id: string; // Unique identifier for the user
-    email: string;
-}
-
-// Removed AppState enum, as navigation is now handled by React Router.
-// The `appState` in localStorage will still be used for restoring session.
+// Removed User interface and AppState enum.

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { UploadedFile } from '../types';
 import { fileToBase64 } from '../utils/fileUtils';
@@ -10,6 +9,26 @@ interface ImageAnalyzerViewProps {
     onAnalyze: (file: UploadedFile, prompt: string) => Promise<string>;
     onBack: () => void;
 }
+
+// Helper to parse basic Markdown into HTML strings for rendering
+const parseMarkdown = (text: string): string => {
+    return text
+        // Bold
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        // Italics
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        // Headers
+        .replace(/^### (.*?)$/gm, '<h3 class="text-lg font-bold mt-4 mb-2 text-gray-800 dark:text-white">$1</h3>')
+        .replace(/^## (.*?)$/gm, '<h2 class="text-xl font-bold mt-6 mb-3 text-indigo-600 dark:text-indigo-400">$1</h2>')
+        // Lists
+        .replace(/^- (.*?)$/gm, '<li class="ml-4 list-disc">$1</li>')
+        // Links
+        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-cyan-600 dark:text-cyan-400 hover:underline">$1</a>')
+        // Code blocks (inline)
+        .replace(/`([^`]+)`/g, '<code class="bg-gray-200 text-cyan-700 dark:bg-gray-700 dark:text-cyan-300 rounded px-1 py-0.5 font-mono text-sm">$1</code>')
+        // Line breaks
+        .replace(/\n/g, '<br />');
+};
 
 const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack }) => {
     const [imageFile, setImageFile] = useState<UploadedFile | null>(null);
@@ -134,7 +153,7 @@ const ImageAnalyzerView: React.FC<ImageAnalyzerViewProps> = ({ onAnalyze, onBack
                     <div className="w-full h-full min-h-[300px] bg-gray-100 dark:bg-slate-800/60 rounded-md p-4 text-gray-700 dark:text-gray-300 overflow-y-auto border border-gray-300 dark:border-slate-700">
                         {isLoading && <LoadingIndicator message="Analisando..." />}
                         {error && <p className="text-red-500 dark:text-red-400">{error}</p>}
-                        {analysis && <p className="whitespace-pre-wrap">{analysis}</p>}
+                        {analysis && <div className="text-gray-700 dark:text-gray-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: parseMarkdown(analysis) }} />}
                         {!isLoading && !analysis && !error && <p className="text-gray-400 dark:text-gray-500">A análise da imagem aparecerá aqui.</p>}
                     </div>
                 </div>

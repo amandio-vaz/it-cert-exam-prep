@@ -2,7 +2,10 @@
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { UploadedFile, Attempt } from '../types';
 import { fileToArrayBuffer, uint8ArrayToBase64 } from '../utils/fileUtils';
-import { CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon, ChartBarIcon, PhotoIcon, MicrophoneIcon } from './icons';
+import { 
+    CloudArrowUpIcon, SparklesIcon, RectangleStackIcon, InformationCircleIcon, 
+    ChartBarIcon, PhotoIcon, MicrophoneIcon, CheckCircleIcon, XCircleIcon, XMarkIcon 
+} from './icons';
 import { PDFDocument } from 'pdf-lib';
 import { ALL_EXAM_CODES, POPULAR_EXAMS } from '../data/examCodes';
 
@@ -27,6 +30,12 @@ interface ProcessingFile {
     name: string;
     progress: number;
     status: 'uploading' | 'processing';
+}
+
+interface FileNotification {
+    id: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    message: string;
 }
 
 const MAX_FILE_SIZE_MB = 50;
@@ -69,7 +78,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     error
 }) => {
     const [isDragging, setIsDragging] = useState(false);
-    const [fileErrors, setFileErrors] = useState<string[]>([]);
+    const [notifications, setNotifications] = useState<FileNotification[]>([]);
     const [hasFlashcards, setHasFlashcards] = useState(false);
     const [language, setLanguage] = useState<'pt-BR' | 'en-US'>('pt-BR');
     const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<string[]>([]);
@@ -115,6 +124,14 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         }
     }, []);
 
+    const addNotification = useCallback((type: FileNotification['type'], message: string) => {
+        setNotifications(prev => [...prev, { id: Date.now().toString() + Math.random(), type, message }]);
+    }, []);
+
+    const removeNotification = useCallback((id: string) => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+    }, []);
+
     // Effect for SpeechRecognition setup and cleanup
     useEffect(() => {
         if (!('webkitSpeechRecognition' in window)) {
@@ -145,7 +162,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         recognitionRef.current.onerror = (event: any) => {
             console.error("Speech recognition error:", event.error);
             if (isMountedRef.current) {
-                setFileErrors(prev => [...prev, `Erro de reconhecimento de voz: ${event.error}.`]);
+                addNotification('error', `Erro de reconhecimento de voz: ${event.error}.`);
                 setIsListening(false);
             }
         };
@@ -161,7 +178,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                 recognitionRef.current.stop();
             }
         };
-    }, [language, setExamCode, setFileErrors]); // Re-initialize if language or setExamCode/setFileErrors change
+    }, [language, setExamCode, addNotification]); // Re-initialize if language or setExamCode changes
 
     // Helper function to read file with progress tracking
     const readFileWithProgress = useCallback((file: File, asArrayBuffer: boolean): Promise<string | ArrayBuffer> => {
@@ -206,21 +223,20 @@ const ConfigView: React.FC<ConfigViewProps> = ({
 
     const handleFileChange = useCallback(async (files: FileList | null) => {
         if (!files) return;
-        setFileErrors([]); 
+        setNotifications([]); // Limpa notificações anteriores ao iniciar novo upload
         
         // Initialize processing state for new files
         const newProcessingFiles = Array.from(files).map(f => ({ name: f.name, progress: 0, status: 'uploading' as const }));
         setProcessingFiles(prev => [...prev, ...newProcessingFiles]);
 
         let processedFiles: UploadedFile[] = [];
-        const currentErrors: string[] = [];
-        let infoMessages: string[] = [];
+        const newNotifications: FileNotification[] = [];
         const PAGE_LIMIT = 1000;
 
         for (const file of Array.from(files)) {
             // Check if we exceed limits considering currently uploaded + processed in this batch
             if (uploadedFiles.length + processedFiles.length >= MAX_FILES) {
-                currentErrors.push(`Você pode carregar no máximo ${MAX_FILES} arquivos.`);
+                newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `Você pode carregar no máximo ${MAX_FILES} arquivos. O arquivo "${file.name}" foi ignorado.` });
                 setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
                 continue;
             }
@@ -230,7 +246,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                                  ['.pdf', '.md', '.docx', '.html', '.txt', '.jpeg', '.jpg', '.png', '.webp', '.gif'].includes(fileExtension);
 
             if (!acceptedMime) {
-                currentErrors.push(`Tipo de arquivo não suportado para "${file.name}". Use PDF, MD, DOCX, HTML ou imagens.`);
+                newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `Tipo de arquivo não suportado para "${file.name}". Use PDF, MD, DOCX, HTML ou imagens.` });
                 setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
                 continue;
             }
@@ -238,7 +254,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
             try {
                 if (file.type === 'application/pdf') {
                     if (file.size > MAX_FILE_SIZE) {
-                        currentErrors.push(`O arquivo PDF "${file.name}" excede o limite de ${MAX_FILE_SIZE_MB}MB e não será processado.`);
+                        newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `O arquivo PDF "${file.name}" excede o limite de ${MAX_FILE_SIZE_MB}MB e não será processado.` });
                         setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
                         continue;
                     }
@@ -254,12 +270,12 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                     if (pageCount > PAGE_LIMIT) {
                         const numChunks = Math.ceil(pageCount / PAGE_LIMIT);
                         if (uploadedFiles.length + processedFiles.length + numChunks > MAX_FILES) {
-                            currentErrors.push(`O PDF "${file.name}" precisa ser dividido em ${numChunks} partes, o que excederia o limite total de ${MAX_FILES} arquivos.`);
+                            newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `O PDF "${file.name}" precisa ser dividido em ${numChunks} partes, o que excederia o limite total de ${MAX_FILES} arquivos.` });
                             setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
                             continue;
                         }
 
-                        infoMessages.push(`O PDF "${file.name}" era muito grande e foi dividido em ${numChunks} partes.`);
+                        newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'info', message: `O PDF "${file.name}" era muito grande e foi dividido em ${numChunks} partes.` });
 
                         const chunkPromises = Array.from({ length: numChunks }, async (_, j) => {
                             const newPdfDoc = await PDFDocument.create();
@@ -292,7 +308,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                     }
                 } else {
                      if (file.size > MAX_FILE_SIZE) {
-                        currentErrors.push(`O arquivo "${file.name}" é muito grande (máx ${MAX_FILE_SIZE_MB}MB).`);
+                        newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `O arquivo "${file.name}" é muito grande (máx ${MAX_FILE_SIZE_MB}MB).` });
                         setProcessingFiles(prev => prev.filter(pf => pf.name !== file.name));
                         continue;
                     }
@@ -308,12 +324,12 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                 const lowerMsg = errorMessage.toLowerCase();
 
                 if (lowerMsg.includes('encrypted') || lowerMsg.includes('password')) {
-                     currentErrors.push(`🔒 O arquivo PDF "${file.name}" está protegido por senha. Por favor, remova a senha antes de carregar.`);
+                     newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `🔒 O arquivo PDF "${file.name}" está protegido por senha. Por favor, remova a senha antes de carregar.` });
                 } else if (lowerMsg.includes('invalid pdf') || lowerMsg.includes('pdf header not found')) {
-                    currentErrors.push(`⚠️ O arquivo PDF "${file.name}" parece estar corrompido ou inválido.`);
+                    newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `⚠️ O arquivo PDF "${file.name}" parece estar corrompido ou inválido.` });
                 }
                 else {
-                    currentErrors.push(`❌ Erro ao processar "${file.name}": ${errorMessage}`);
+                    newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'error', message: `❌ Erro ao processar "${file.name}": ${errorMessage}` });
                 }
             } finally {
                 // Remove from processing list whether success or fail
@@ -324,10 +340,16 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         }
         
         if (isMountedRef.current) {
-            setFileErrors([...currentErrors, ...infoMessages]);
             if (processedFiles.length > 0) {
                 setUploadedFiles(prev => [...prev, ...processedFiles].slice(0, MAX_FILES));
+                // Add success notifications
+                processedFiles.forEach(f => {
+                     if (!f.name.includes('-parte')) {
+                         newNotifications.push({ id: Date.now().toString() + Math.random(), type: 'success', message: `Arquivo "${f.name}" carregado com sucesso!` });
+                     }
+                });
             }
+             setNotifications(prev => [...prev, ...newNotifications]);
         }
     }, [setUploadedFiles, uploadedFiles.length, readFileWithProgress]);
 
@@ -354,7 +376,6 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     const handleDragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
         e.preventDefault();
         e.stopPropagation();
-        setFileErrors([]);
         setIsDragging(true);
     };
     const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
@@ -377,7 +398,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
     
     const handleVoiceInput = () => {
         if (!recognitionRef.current || !voiceInputSupported.current) {
-            setFileErrors(prev => [...prev, "Recurso de reconhecimento de voz não disponível neste navegador."]);
+            addNotification('error', "Recurso de reconhecimento de voz não disponível neste navegador.");
             return;
         }
 
@@ -385,14 +406,14 @@ const ConfigView: React.FC<ConfigViewProps> = ({
             recognitionRef.current.stop();
             setIsListening(false);
         } else {
-            setFileErrors([]); // Clear previous voice-related errors
+            setNotifications(prev => prev.filter(n => !n.message.includes('voz'))); // Limpa erros anteriores de voz
             try {
                 recognitionRef.current.lang = language === 'pt-BR' ? 'pt-BR' : 'en-US'; // Ensure language is up-to-date
                 recognitionRef.current.start();
                 setIsListening(true);
             } catch (e) {
                 console.error("Error starting speech recognition:", e);
-                setFileErrors(prev => [...prev, `Falha ao iniciar o reconhecimento de voz. Certifique-se de que o microfone está disponível e as permissões foram concedidas. ${e instanceof Error ? e.message : String(e)}`]);
+                addNotification('error', `Falha ao iniciar o reconhecimento de voz: ${e instanceof Error ? e.message : String(e)}`);
                 setIsListening(false);
             }
         }
@@ -456,10 +477,13 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                         ) : (
                             <>
                                 <CloudArrowUpIcon className="h-10 w-10 text-gray-500 mb-3" />
-                                <p className="text-sm text-gray-400">
+                                <p className="text-sm text-gray-400 mb-2">
                                     <span className="font-semibold text-gray-300">Arraste e solte</span> até {MAX_FILES} arquivos aqui
                                 </p>
-                                <p className="text-xs text-gray-500">ou clique para selecionar (PDF, MD, DOCX, HTML, Imagens)</p>
+                                <div className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors shadow-md">
+                                    Selecionar Arquivos
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">Suporta PDF, MD, DOCX, HTML, Imagens</p>
                             </>
                         )}
                         <input id="file-upload-input" name="file-upload" type="file" className="sr-only" multiple onChange={(e) => handleFileChange(e.target.files)} accept={SUPPORTED_FILE_TYPES.join(',')} />
@@ -467,19 +491,35 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                     <p className="text-xs text-gray-500 text-center -mt-2">
                         Limite por arquivo: {MAX_FILE_SIZE_MB}MB. PDFs com mais de 1000 páginas serão divididos.
                     </p>
-                     {fileErrors.length > 0 && (
-                        <div className="space-y-1">
-                            {fileErrors.map((msg, index) => {
-                                const isInfo = msg.includes('foi dividido');
-                                const isWarning = msg.includes('⚠️');
-                                const isLock = msg.includes('🔒');
-                                let colorClass = 'text-red-400';
-                                if (isInfo) colorClass = 'text-cyan-400';
-                                if (isWarning) colorClass = 'text-amber-400';
-                                if (isLock) colorClass = 'text-rose-400';
-                                
-                                return <p key={index} className={`text-sm ${colorClass}`}>{msg}</p>;
-                            })}
+                    
+                     {/* Notifications Area */}
+                     {notifications.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                            {notifications.map((note) => (
+                                <div 
+                                    key={note.id} 
+                                    className={`flex items-start gap-3 p-3 rounded-lg text-sm border transition-all duration-300 animate-fade-in-slide-up ${
+                                        note.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
+                                        note.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+                                        note.type === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+                                        'bg-cyan-500/10 border-cyan-500/20 text-cyan-400'
+                                    }`}
+                                >
+                                    <div className="flex-shrink-0 mt-0.5">
+                                        {note.type === 'success' && <CheckCircleIcon className="w-5 h-5" />}
+                                        {note.type === 'error' && <XCircleIcon className="w-5 h-5" />}
+                                        {note.type === 'warning' && <InformationCircleIcon className="w-5 h-5" />}
+                                        {note.type === 'info' && <InformationCircleIcon className="w-5 h-5" />}
+                                    </div>
+                                    <span className="flex-grow">{note.message}</span>
+                                    <button 
+                                        onClick={() => removeNotification(note.id)}
+                                        className="flex-shrink-0 text-gray-400 hover:text-gray-200 transition-colors"
+                                    >
+                                        <XMarkIcon className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                      )}
 
@@ -688,7 +728,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                 <div className="text-center md:col-span-2">
                     <button
                         onClick={onViewImageAnalyzer}
-                        className="inline-flex items-center justify-center gap-3 px-6 py-3 border border-slate-700/80 text-base font-medium rounded-xl text-gray-300 hover:bg-slate-800/50 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-orange-500 transition-all duration-200 w-full"
+                        className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-all duration-200 shadow-lg hover:shadow-indigo-500/30"
                     >
                         <PhotoIcon className="w-5 h-5" />
                         Analisar Imagem com IA

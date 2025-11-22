@@ -1,8 +1,7 @@
 
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'; // Import React Router hooks and components
-import { ExamData, Attempt, Question, UserAnswer, UploadedFile, User } from './types';
+import { ExamData, Attempt, Question, UserAnswer, UploadedFile } from './types';
 import { generateExam, generateStudyPlan, analyzeImageWithGemini } from './services/geminiService';
 
 // Fix: Header is now consistently a named export from Header.tsx
@@ -15,7 +14,6 @@ import ImageAnalyzerView from './components/ImageAnalyzerView';
 import LoadingIndicator from './components/LoadingIndicator';
 import ReviewView from './components/ReviewView';
 import FlashcardView from './components/FlashcardView';
-import LoginView from '@/components/Login/LoginView'; // Explicitly add .tsx extension
 import AttemptHistoryView from './components/AttemptHistoryView';
 import AttemptDetailsView from './components/AttemptDetailsView';
 import Sidebar from './components/Sidebar';
@@ -26,8 +24,6 @@ const App: React.FC = () => {
     const navigate = useNavigate();
     const isMountedRef = React.useRef(true);
 
-
-    const [user, setUser] = useState<User | null>(null);
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
     const [examCode, setExamCode] = useState<string>('');
     const [extraTopics, setExtraTopics] = useState<string>('');
@@ -57,27 +53,17 @@ const App: React.FC = () => {
         return () => { isMountedRef.current = false; };
     }, []);
 
-    // Initialize user from local storage (mock session)
+    // Load attempts from local storage (anonymous/global)
     useEffect(() => {
-        const storedUser = localStorage.getItem('cortexCurrentUser');
-        if (storedUser) {
+        const savedAttempts = localStorage.getItem('cortexAttempts');
+        if (savedAttempts) {
             try {
-                const parsedUser: User = JSON.parse(storedUser);
-                setUser(parsedUser);
-                // Load attempts for this user
-                const savedUserDataRaw = localStorage.getItem(`cortexUserData_${parsedUser.id}`);
-                if (savedUserDataRaw) {
-                    const savedUserData = JSON.parse(savedUserDataRaw);
-                    setAttempts(savedUserData.attempts || []);
-                } else {
-                    setAttempts([]);
-                }
+                setAttempts(JSON.parse(savedAttempts));
             } catch (e) {
-                console.error("Failed to parse stored user:", e);
-                localStorage.removeItem('cortexCurrentUser');
+                console.error("Failed to parse stored attempts:", e);
             }
         }
-    }, []); // Run only once on mount to restore session
+    }, []);
 
     useEffect(() => {
         // Define o tema inicial com base no localStorage ou preferência do sistema
@@ -99,7 +85,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         const savedProgress = localStorage.getItem('cortexExamProgress');
-        if (user && savedProgress) { // Only attempt to restore if a user is logged in
+        if (savedProgress) {
             try {
                 const { 
                     appState: savedAppState, 
@@ -126,7 +112,10 @@ const App: React.FC = () => {
 
                         setExamData(savedExamData); // Use the original examData, `ExamView` will handle reordering if `initialOrderedQuestions` is passed
                         setUserAnswers(savedUserAnswers);
-                        setAttempts(savedAttempts || []);
+                        // We don't overwrite attempts from progress if we have them loaded separately, 
+                        // but if starting fresh it might be useful. 
+                        // Ideally attempts should be loaded from the main key 'cortexAttempts'.
+                        
                         setInitialTimeLeft(savedTimeLeft);
                         setInitialCurrentQuestionIndex(savedCurrentQuestionIndex !== undefined ? savedCurrentQuestionIndex : 0);
                         setInitialOrderedQuestions(restoredOrderedQuestions);
@@ -149,60 +138,7 @@ const App: React.FC = () => {
                 setInitialFlaggedQuestions(null);
             }
         }
-    }, [user, navigate]); // Depend on `user` to ensure it's loaded before checking progress
-
-    // ===== Mock Authentication Handlers (email-based, no password) =====
-    const handleLogin = useCallback((email: string) => {
-        setError(null); // Clear previous errors
-        let registeredUsersRaw = localStorage.getItem('cortexRegisteredUsers');
-        // Fix: Explicitly type registeredUsers to ensure correct type inference for User objects
-        let registeredUsers: { [key: string]: User } = registeredUsersRaw ? JSON.parse(registeredUsersRaw) : {};
-
-        let foundUser: User | undefined = Object.values(registeredUsers).find((u: User) => u.email === email);
-        let currentUser: User;
-
-        if (foundUser) {
-            currentUser = { id: foundUser.id, email: email };
-            console.log(`Usuário existente logado: ${email}`);
-        } else {
-            // Implicit registration: create new user if email not found
-            const newUserId = `user_${Date.now()}`;
-            const newUser: User = { id: newUserId, email: email };
-            registeredUsers[newUserId] = newUser;
-            localStorage.setItem('cortexRegisteredUsers', JSON.stringify(registeredUsers));
-            currentUser = newUser;
-            console.log(`Novo usuário criado (registro implícito): ${email}`);
-        }
-
-        setUser(currentUser);
-        localStorage.setItem('cortexCurrentUser', JSON.stringify(currentUser));
-
-        // Load attempts for this user (or initialize empty for new user)
-        const savedUserDataRaw = localStorage.getItem(`cortexUserData_${currentUser.id}`);
-        if (savedUserDataRaw) {
-            try {
-                const savedUserData = JSON.parse(savedUserDataRaw);
-                setAttempts(savedUserData.attempts || []);
-            } catch (e) {
-                console.error("Falha ao carregar dados do usuário:", e);
-                setAttempts([]);
-            }
-        } else {
-            setAttempts([]);
-        }
-        navigate('/');
-        return true;
-    }, [navigate]);
-
-
-    const handleLogout = useCallback(() => {
-        setUser(null);
-        setAttempts([]); // Limpa as tentativas ao deslogar
-        setIsSidebarOpen(false); // Fecha o sidebar ao deslogar
-        localStorage.removeItem('cortexExamProgress'); // Limpa qualquer progresso de exame em andamento
-        localStorage.removeItem('cortexCurrentUser'); // Clear current user session
-        navigate('/login'); // Redireciona para a página de login
-    }, [navigate]);
+    }, [navigate]); 
 
     const toggleSidebar = useCallback(() => {
         setIsSidebarOpen(prev => !prev);
@@ -277,7 +213,7 @@ const App: React.FC = () => {
     }, [examCode, uploadedFiles, questionCount, extraTopics, attempts, navigate, closeSidebar]);
 
     const handleFinishExam = useCallback((finalAnswers: UserAnswer) => {
-        if (!examData || !user) return; // user should always be present now due to mock
+        if (!examData) return;
 
         let correctCount = 0;
         examData.questions.forEach(q => {
@@ -301,15 +237,11 @@ const App: React.FC = () => {
         const updatedAttempts = [...attempts, newAttempt];
         setAttempts(updatedAttempts);
 
-        // Salva as tentativas atualizadas para o usuário
+        // Salva as tentativas atualizadas no armazenamento global
         try {
-            const userDataToSave = {
-                attempts: updatedAttempts,
-            };
-            // user is guaranteed to be not null here.
-            localStorage.setItem(`cortexUserData_${user.id}`, JSON.stringify(userDataToSave));
+            localStorage.setItem('cortexAttempts', JSON.stringify(updatedAttempts));
         } catch (e) {
-            console.error("Falha ao salvar os dados do usuário:", e);
+            console.error("Falha ao salvar tentativas:", e);
         }
 
         setUserAnswers(finalAnswers);
@@ -321,7 +253,7 @@ const App: React.FC = () => {
         setInitialOrderedQuestions(null);
         setInitialFlaggedQuestions(null);
 
-    }, [examData, user, attempts, navigate, closeSidebar]);
+    }, [examData, attempts, navigate, closeSidebar]);
     
     const handleGenerateStudyPlan = useCallback(async () => {
         if (!examData || !currentAttempt) return;
@@ -408,12 +340,6 @@ const App: React.FC = () => {
         }
     }, [navigate, location.pathname, closeSidebar]);
 
-
-    // Re-enabled: Authentication gate
-    if (!user && location.pathname !== '/login') { // Only check for /login path now
-        return <LoginView onLogin={handleLogin} />;
-    }
-
     // Removed local sidebar width constants as they are now handled by CSS variables or direct Tailwind classes from Sidebar.tsx
     // Corrected dynamic Tailwind class for margin-left
     const mainContentClasses = `
@@ -424,58 +350,45 @@ const App: React.FC = () => {
 
     return (
         <div className="flex min-h-screen bg-gray-100 dark:bg-gradient-to-br dark:from-slate-900 dark:via-gray-900 dark:to-black">
-            {/* Sidebar always renders, but its content might depend on `user` */}
-            {user && ( // Only render sidebar if user is logged in
-                <Sidebar
-                    isOpen={isSidebarOpen}
-                    onClose={closeSidebar}
-                    onNavigate={handleNavigate}
-                    onToggle={toggleSidebar}
-                />
-            )}
+            <Sidebar
+                isOpen={isSidebarOpen}
+                onClose={closeSidebar}
+                onNavigate={handleNavigate}
+                onToggle={toggleSidebar}
+            />
             
             <div className="flex-1 flex flex-col">
-                {/* Header always renders, but its content might depend on `user` */}
-                {user && ( // Only render header if user is logged in
-                    <Header
-                        user={user}
-                        onLogout={handleLogout}
-                        theme={theme}
-                        onThemeToggle={handleThemeToggle}
-                        onToggleSidebar={toggleSidebar}
-                        isSidebarOpen={isSidebarOpen}
-                    />
-                )}
+                <Header
+                    theme={theme}
+                    onThemeToggle={handleThemeToggle}
+                    onToggleSidebar={toggleSidebar}
+                    isSidebarOpen={isSidebarOpen}
+                />
                 {generationStatus && <LoadingIndicator message={generationStatus} />}
                 
                 <main className={mainContentClasses}>
                     {!generationStatus && ( // Render routes only when not generating
                         <Routes>
-                            <Route path="/login" element={<LoginView onLogin={handleLogin} />} />
                             <Route path="/" element={
-                                user ? ( // Protect routes that require authentication
-                                    <ConfigView
-                                        uploadedFiles={uploadedFiles}
-                                        setUploadedFiles={setUploadedFiles}
-                                        examCode={examCode}
-                                        setExamCode={setExamCode}
-                                        extraTopics={extraTopics}
-                                        setExtraTopics={setExtraTopics}
-                                        questionCount={questionCount}
-                                        setQuestionCount={setQuestionCount}
-                                        onStartExam={handleStartExam}
-                                        onViewFlashcards={() => handleNavigate('/flashcards')}
-                                        onViewAttemptHistory={() => handleNavigate('/history')}
-                                        onViewImageAnalyzer={() => handleNavigate('/image-analyzer')}
-                                        attempts={attempts}
-                                        error={error}
-                                    />
-                                ) : (
-                                    <LoginView onLogin={handleLogin} /> // Redirect to login if not authenticated
-                                )
+                                <ConfigView
+                                    uploadedFiles={uploadedFiles}
+                                    setUploadedFiles={setUploadedFiles}
+                                    examCode={examCode}
+                                    setExamCode={setExamCode}
+                                    extraTopics={extraTopics}
+                                    setExtraTopics={setExtraTopics}
+                                    questionCount={questionCount}
+                                    setQuestionCount={setQuestionCount}
+                                    onStartExam={handleStartExam}
+                                    onViewFlashcards={() => handleNavigate('/flashcards')}
+                                    onViewAttemptHistory={() => handleNavigate('/history')}
+                                    onViewImageAnalyzer={() => handleNavigate('/image-analyzer')}
+                                    attempts={attempts}
+                                    error={error}
+                                />
                             } />
                             <Route path="/exam" element={
-                                user && examData ? (
+                                examData ? (
                                     <ExamView
                                         examData={examData}
                                         onFinishExam={handleFinishExam}
@@ -487,11 +400,11 @@ const App: React.FC = () => {
                                         initialFlaggedQuestions={initialFlaggedQuestions} // Pass restored flagged questions
                                     />
                                 ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Nenhum exame carregado ou usuário não autenticado. Volte para a configuração.</div>
+                                    <div className="text-center text-red-500 dark:text-red-400">Nenhum exame carregado. Volte para a configuração.</div>
                                 )
                             } />
                             <Route path="/results" element={
-                                user && currentAttempt && examData ? (
+                                currentAttempt && examData ? (
                                     <ResultsView
                                         examData={examData}
                                         userAnswers={userAnswers}
@@ -503,11 +416,11 @@ const App: React.FC = () => {
                                         onViewAttemptHistory={() => handleNavigate('/history')}
                                     />
                                 ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Nenhum resultado de exame disponível ou usuário não autenticado.</div>
+                                    <div className="text-center text-red-500 dark:text-red-400">Nenhum resultado de exame disponível.</div>
                                 )
                             } />
                             <Route path="/study-plan" element={
-                                user && studyPlan ? (
+                                studyPlan ? (
                                     <StudyPlanView
                                         plan={studyPlan}
                                         examCode={examData?.examCode || 'N/A'}
@@ -515,61 +428,49 @@ const App: React.FC = () => {
                                         onRegenerate={handleRegenerateStudyPlan}
                                     />
                                 ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Nenhum plano de estudos disponível ou usuário não autenticado.</div>
+                                    <div className="text-center text-red-500 dark:text-red-400">Nenhum plano de estudos disponível.</div>
                                 )
                             } />
                             <Route path="/image-analyzer" element={
-                                user ? (
-                                    <ImageAnalyzerView
-                                        onAnalyze={handleAnalyzeImage}
-                                        onBack={() => handleNavigate('/')}
-                                    />
-                                ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Usuário não autenticado.</div>
-                                )
+                                <ImageAnalyzerView
+                                    onAnalyze={handleAnalyzeImage}
+                                    onBack={() => handleNavigate('/')}
+                                />
                             } />
                             <Route path="/review" element={
-                                user && questionsToReview.length > 0 && currentAttempt ? (
+                                questionsToReview.length > 0 && currentAttempt ? (
                                     <ReviewView
                                         questions={questionsToReview}
                                         userAnswers={currentAttempt.userAnswers}
                                         onBackToResults={() => handleNavigate('/results')}
                                     />
                                 ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Nenhuma questão para revisar, tentativa atual não definida ou usuário não autenticado.</div>
+                                    <div className="text-center text-red-500 dark:text-red-400">Nenhuma questão para revisar ou tentativa atual não definida.</div>
                                 )
                             } />
                             <Route path="/flashcards" element={
-                                user ? (
-                                    <FlashcardView
-                                        onBack={() => handleNavigate('/')}
-                                    />
-                                ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Usuário não autenticado.</div>
-                                )
+                                <FlashcardView
+                                    onBack={() => handleNavigate('/')}
+                                />
                             } />
                             <Route path="/history" element={
-                                user ? (
-                                    <AttemptHistoryView
-                                        attempts={attempts}
-                                        onBack={() => handleNavigate('/')}
-                                        onViewDetails={(attempt) => {
-                                            setCurrentAttempt(attempt); // Define a tentativa para visualização detalhada
-                                            navigate(`/history/${attempt.timestamp}`); // Navega para a rota de detalhes
-                                        }}
-                                    />
-                                ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Usuário não autenticado.</div>
-                                )
+                                <AttemptHistoryView
+                                    attempts={attempts}
+                                    onBack={() => handleNavigate('/')}
+                                    onViewDetails={(attempt) => {
+                                        setCurrentAttempt(attempt); // Define a tentativa para visualização detalhada
+                                        navigate(`/history/${attempt.timestamp}`); // Navega para a rota de detalhes
+                                    }}
+                                />
                             } />
                              <Route path="/history/:timestamp" element={
-                                user && currentAttempt ? (
+                                currentAttempt ? (
                                     <AttemptDetailsView
                                         attempt={currentAttempt}
                                         onBack={() => handleNavigate('/history')}
                                     />
                                 ) : (
-                                    <div className="text-center text-red-500 dark:text-red-400">Detalhes da tentativa não encontrados ou usuário não autenticado.</div>
+                                    <div className="text-center text-red-500 dark:text-red-400">Detalhes da tentativa não encontrados.</div>
                                 )
                             } />
                         </Routes>
