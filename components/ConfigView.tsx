@@ -695,7 +695,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                     <button 
                         onClick={() => onStartExam(language)} 
                         disabled={!canStart} 
-                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-violet-500 hover:from-purple-700 hover:to-violet-600 disabled:from-slate-600 disabled:to-slate-700 disabled:text-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-violet-500 transition-all duration-200 shadow-lg hover:shadow-violet-500/30"
+                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-violet-500 hover:from-purple-700 hover:to-violet-600 disabled:from-slate-600 disabled:to-slate-700 disabled:text-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-violet-500 transition-all duration-200 shadow-lg hover:shadow-violet-500/40 transform hover:-translate-y-1"
                     >
                         <SparklesIcon className="w-5 h-5" />
                         Gerar Simulado
@@ -728,7 +728,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                 <div className="text-center md:col-span-2">
                     <button
                         onClick={onViewImageAnalyzer}
-                        className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-all duration-200 shadow-lg hover:shadow-indigo-500/30"
+                        className="w-full flex items-center justify-center gap-3 px-6 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-indigo-600 to-blue-500 hover:from-indigo-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-all duration-200 shadow-lg hover:shadow-indigo-500/40 transform hover:-translate-y-1"
                     >
                         <PhotoIcon className="w-5 h-5" />
                         Analisar Imagem com IA

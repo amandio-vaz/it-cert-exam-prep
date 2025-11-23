@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { SunIcon, MoonIcon, Bars3Icon } from './icons'; // Removed ArrowRightOnRectangleIcon as logout is gone
+import { SunIcon, MoonIcon, Bars3Icon, XMarkIcon } from './icons'; // Removed ArrowRightOnRectangleIcon as logout is gone
 
 interface HeaderProps {
     theme: 'light' | 'dark' | null;
@@ -17,9 +17,13 @@ export const Header: React.FC<HeaderProps> = ({ theme, onThemeToggle, onToggleSi
                 <button
                     onClick={onToggleSidebar}
                     className="p-2 rounded-md text-gray-400 hover:bg-slate-800 hover:text-white transition-colors md:hidden"
-                    aria-label="Toggle menu"
+                    aria-label={isSidebarOpen ? "Fechar menu" : "Abrir menu"}
                 >
-                    <Bars3Icon className="w-6 h-6" />
+                    {isSidebarOpen ? (
+                        <XMarkIcon className="w-6 h-6" />
+                    ) : (
+                        <Bars3Icon className="w-6 h-6" />
+                    )}
                 </button>
                 {/* Simplified logo placeholder */}
                 <span className="text-xl font-bold text-white">Cortex</span> 
