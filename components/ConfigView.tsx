@@ -134,15 +134,17 @@ const ConfigView: React.FC<ConfigViewProps> = ({
 
     // Effect for SpeechRecognition setup and cleanup
     useEffect(() => {
-        if (!('webkitSpeechRecognition' in window)) {
+        // Fix: Check for both standard and webkit prefixed versions
+        const SpeechRecognitionConstructor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (!SpeechRecognitionConstructor) {
             console.warn("Web Speech API not supported by this browser. Voice input disabled.");
             voiceInputSupported.current = false;
             return; // Exit if not supported
         }
         voiceInputSupported.current = true;
 
-        const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current = new SpeechRecognitionConstructor();
         recognitionRef.current.continuous = false; // For single phrases
         recognitionRef.current.interimResults = false;
         recognitionRef.current.lang = language === 'pt-BR' ? 'pt-BR' : 'en-US'; // Set language dynamically

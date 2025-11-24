@@ -31,7 +31,7 @@
       }
 
       html.dark {
-        background-color: #0d1117; /* Dark background */
+        background-color: #020617; /* Darker background (Slate 950) */
       }
 
       /* Custom Scrollbar for better UX */
@@ -46,7 +46,7 @@
       }
 
       html.dark ::-webkit-scrollbar-track {
-        background: #2d333b; /* Darker track for dark mode */
+        background: #1e293b; /* Slate 800 */
       }
 
       ::-webkit-scrollbar-thumb {
@@ -55,7 +55,7 @@
       }
 
       html.dark ::-webkit-scrollbar-thumb {
-        background: #6c757d; /* Lighter thumb for dark mode */
+        background: #475569; /* Slate 600 */
       }
 
       ::-webkit-scrollbar-thumb:hover {
@@ -63,7 +63,7 @@
       }
 
       html.dark ::-webkit-scrollbar-thumb:hover {
-        background: #8c969f;
+        background: #64748b; /* Slate 500 */
       }
 
       /* Apply to elements that need custom scrollbars */
@@ -73,7 +73,7 @@
       }
 
       html.dark .custom-scrollbar {
-        scrollbar-color: #6c757d #2d333b; /* Firefox dark mode */
+        scrollbar-color: #475569 #1e293b; /* Firefox dark mode */
       }
 
       /* Fade-in for modals/popups */
@@ -100,6 +100,28 @@
           opacity: 1;
           transform: translateY(0);
         }
+      }
+
+      /* Grid Pattern for Background */
+      .bg-grid-white {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='rgb(255 255 255 / 0.05)'%3e%3cpath d='M0 .5H31.5V32'/%3e%3c/svg%3e");
+      }
+
+      /* Animations for Background Orbs */
+      @keyframes float {
+        0% { transform: translate(0, 0) scale(1); }
+        33% { transform: translate(30px, -50px) scale(1.1); }
+        66% { transform: translate(-20px, 20px) scale(0.9); }
+        100% { transform: translate(0, 0) scale(1); }
+      }
+      .animate-blob {
+        animation: float 10s infinite;
+      }
+      .animation-delay-2000 {
+        animation-delay: 2s;
+      }
+      .animation-delay-4000 {
+        animation-delay: 4s;
       }
 
       /* Spelling error highlight */

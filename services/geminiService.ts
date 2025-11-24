@@ -1,5 +1,3 @@
-
-
 import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/genai";
 import { UploadedFile, ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
 
@@ -117,13 +115,10 @@ const distillFileContent = async (file: UploadedFile, examCode: string, language
         const response = await ai.models.generateContent({
             model: modelName,
             contents,
-            // pt-BR: Limita o tamanho da resposta para garantir um resumo conciso e otimizar custos,
-            // assegurando uma análise focada dos materiais de estudo.
-            // en-US: Limits the response size to ensure a concise summary and optimize costs,
-            // ensuring a focused analysis of the study materials.
+            // pt-BR: Limita o tamanho da resposta para garantir um resumo conciso e otimizar custos.
+            // en-US: Limits the response size to ensure a concise summary and optimize costs.
             config: {
-                maxOutputTokens: 1536,
-                thinkingConfig: { thinkingBudget: 512 },
+                maxOutputTokens: 2048,
             },
         });
         return response.text || '';
@@ -193,14 +188,10 @@ export const generateExam = async (
     const config = {
         systemInstruction,
         tools: [{ googleSearch: {} }],
-        // pt-BR: Ajusta dinamicamente os limites de tokens com base na quantidade de questões (`questionCount`),
-        // alocando 600 tokens para o output final *por questão* e 200 tokens para o processo de raciocínio *por questão*.
-        // Isso garante um exame focado, eficiente e otimiza a qualidade e o custo.
-        // en-US: Dynamically adjusts token limits based on the `questionCount`,
-        // allocating 600 tokens for the final output *per question* and 200 tokens for the model's thinking process *per question*.
-        // This ensures a focused and efficient exam, optimizing quality and cost.
-        maxOutputTokens: questionCount * 600,
-        thinkingConfig: { thinkingBudget: questionCount * 200 },
+        // pt-BR: Limita o output para o máximo seguro do modelo para evitar erros de limite.
+        // en-US: Caps output to the model's safe maximum to avoid limit errors.
+        maxOutputTokens: 8192,
+        temperature: 0.5,
     };
 
     const response = await ai.models.generateContent({
@@ -211,12 +202,14 @@ export const generateExam = async (
 
     let jsonText = (response.text || '').trim();
     
-    // Tenta extrair o JSON de um bloco de código markdown, se existir.
-    const markdownJsonRegex = /```json\s*([\s\S]*?)\s*```/;
-    const match = jsonText.match(markdownJsonRegex);
+    // Remove markdown code blocks (case insensitive for JSON/json)
+    jsonText = jsonText.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, '$1');
 
-    if (match && match[1]) {
-        jsonText = match[1];
+    // Fallback: Tenta encontrar o objeto JSON se houver texto extra ao redor
+    const firstBrace = jsonText.indexOf('{');
+    const lastBrace = jsonText.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        jsonText = jsonText.substring(firstBrace, lastBrace + 1);
     }
 
     try {
@@ -224,7 +217,7 @@ export const generateExam = async (
         return parsedJson as ExamData;
     } catch (error) {
         console.error("Failed to parse JSON response:", jsonText);
-        throw new Error("A resposta da IA não estava em um formato JSON válido, mesmo após a tentativa de extração.");
+        throw new Error("A resposta da IA não estava em um formato JSON válido. O conteúdo gerado pode ter sido cortado ou corrompido.");
     }
 };
 
@@ -326,12 +319,7 @@ Para domínios com pontuação **acima de 90%**, apenas liste-os com um emoji �
         contents: prompt,
         config: { 
             tools: [{ googleSearch: {} }],
-            // pt-BR: Limita o tamanho do plano de estudos para garantir que seja detalhado, mas conciso,
-            // otimizando a eficiência da resposta.
-            // en-US: Limits the study plan size to ensure it is detailed yet concise,
-            // optimizing response efficiency.
-            maxOutputTokens: 3072,
-            thinkingConfig: { thinkingBudget: 1024 },
+            maxOutputTokens: 4096,
         },
     });
     
@@ -373,13 +361,8 @@ export const analyzeImageWithGemini = async (image: UploadedFile, prompt: string
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, textPart] },
-        // pt-BR: Limita a resposta da análise de imagem para manter a concisão e controlar custos,
-        // garantindo uma análise focada.
-        // en-US: Limits the image analysis response to maintain conciseness and control costs,
-        // ensuring a focused analysis.
         config: {
             maxOutputTokens: 2048,
-            thinkingConfig: { thinkingBudget: 1024 },
         },
     });
 
@@ -394,10 +377,8 @@ export const generateQuestionTitle = async (questionText: string): Promise<strin
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
-            // pt-BR: Limite de tokens baixo para um título rápido e curto, garantindo foco.
-            // en-US: Low token limit for a quick and short title, ensuring focus.
             maxOutputTokens: 50, 
-            temperature: 0.2, // Baixa temperatura para um título mais focado e menos criativo
+            temperature: 0.2, 
         },
     });
 

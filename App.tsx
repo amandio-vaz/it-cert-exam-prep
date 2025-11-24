@@ -17,6 +17,7 @@ import FlashcardView from './components/FlashcardView';
 import AttemptHistoryView from './components/AttemptHistoryView';
 import AttemptDetailsView from './components/AttemptDetailsView';
 import Sidebar from './components/Sidebar';
+import LoginView from './components/LoginView';
 
 
 const App: React.FC = () => {
@@ -42,6 +43,11 @@ const App: React.FC = () => {
     const [initialOrderedQuestions, setInitialOrderedQuestions] = useState<Question[] | null>(null);
     const [initialFlaggedQuestions, setInitialFlaggedQuestions] = useState<string[] | null>(null);
 
+    // Simplificação de login (ainda usando LoginView para a primeira tela, mas sem autenticação real complexa)
+    // Para simplificar conforme pedido anterior, assumimos que se o usuário está na raiz e não tem dados, mostra login.
+    // Mas o usuário pediu para remover a caixa de login anteriormente e depois deu o código dela de volta.
+    // Vou manter a estrutura visual.
+    const [userEmail, setUserEmail] = useState<string | null>(localStorage.getItem('cortexUserEmail'));
 
     const [theme, setTheme] = useState<'light' | 'dark' | null>(null);
     const [generationStatus, setGenerationStatus] = useState<string>('');
@@ -112,9 +118,6 @@ const App: React.FC = () => {
 
                         setExamData(savedExamData); // Use the original examData, `ExamView` will handle reordering if `initialOrderedQuestions` is passed
                         setUserAnswers(savedUserAnswers);
-                        // We don't overwrite attempts from progress if we have them loaded separately, 
-                        // but if starting fresh it might be useful. 
-                        // Ideally attempts should be loaded from the main key 'cortexAttempts'.
                         
                         setInitialTimeLeft(savedTimeLeft);
                         setInitialCurrentQuestionIndex(savedCurrentQuestionIndex !== undefined ? savedCurrentQuestionIndex : 0);
@@ -151,6 +154,12 @@ const App: React.FC = () => {
     const handleThemeToggle = useCallback(() => {
         setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
     }, []);
+
+    const handleLogin = (email: string) => {
+        localStorage.setItem('cortexUserEmail', email);
+        setUserEmail(email);
+        return true;
+    };
 
     const handleStartExam = useCallback(async (language: 'pt-BR' | 'en-US') => {
         if (!examCode || uploadedFiles.length === 0) {
@@ -197,12 +206,16 @@ const App: React.FC = () => {
         } catch (e) {
             console.error(e);
             let errorMessage = 'Falha ao gerar o exame. A IA pode estar sobrecarregada ou o conteúdo fornecido pode ser inválido. Tente novamente.';
-            if (e instanceof Error && e.message.includes('exceeds the supported page limit')) {
-                errorMessage = 'Um dos PDFs fornecidos excede o limite de 1000 páginas. Por favor, use um arquivo menor ou divida-o.';
-            } else if (e instanceof Error && e.message.includes('password protected')) {
-                errorMessage = 'Um dos PDFs fornecidos está protegido por senha e não pode ser processado.';
-            } else if (e instanceof Error && e.message.includes('Failed to process file')) {
-                errorMessage = `Falha ao processar um dos arquivos: ${e.message}. Verifique se o arquivo não está corrompido.`;
+            if (e instanceof Error) {
+                if (e.message.includes('exceeds the supported page limit')) {
+                    errorMessage = 'Um dos PDFs fornecidos excede o limite de 1000 páginas. Por favor, use um arquivo menor ou divida-o.';
+                } else if (e.message.includes('password protected')) {
+                    errorMessage = 'Um dos PDFs fornecidos está protegido por senha e não pode ser processado.';
+                } else if (e.message.includes('Failed to process file')) {
+                    errorMessage = `Falha ao processar um dos arquivos: ${e.message}. Verifique se o arquivo não está corrompido.`;
+                } else if (e.message.includes('JSON') || e.message.includes('formato JSON')) {
+                    errorMessage = 'Erro ao processar a resposta da IA. O conteúdo gerado não estava no formato esperado. Tente novamente com menos questões ou documentos menores.';
+                }
             }
             setError(errorMessage);
             closeSidebar(); // Fecha o sidebar em caso de erro
@@ -328,28 +341,32 @@ const App: React.FC = () => {
         }
     }, [examData, userAnswers, currentAttempt, navigate]);
 
-    // Handlers para navegação via sidebar
     const handleNavigate = useCallback((path: string) => {
-        // Only navigate if path is different to avoid unnecessary re-renders/pushes
         if (location.pathname !== path) {
             navigate(path);
         }
-        // Close sidebar in mobile, in desktop it stays as is
         if (window.innerWidth < 768) { 
             closeSidebar(); 
         }
     }, [navigate, location.pathname, closeSidebar]);
 
-    // Removed local sidebar width constants as they are now handled by CSS variables or direct Tailwind classes from Sidebar.tsx
-    // Corrected dynamic Tailwind class for margin-left
     const mainContentClasses = `
         flex-grow p-6 md:p-8 transition-[margin-left] duration-300 ease-in-out
         ${isSidebarOpen ? 'md:ml-64' : 'md:ml-20'}
         overflow-auto h-screen custom-scrollbar
     `;
 
+    // Render logic: Show LoginView if no email is set
+    if (!userEmail) {
+        return (
+            <div className="flex min-h-screen bg-slate-950 text-white">
+               <LoginView onLogin={handleLogin} />
+            </div>
+        );
+    }
+
     return (
-        <div className="flex min-h-screen bg-gray-100 dark:bg-gradient-to-br dark:from-slate-900 dark:via-gray-900 dark:to-black">
+        <div className="flex min-h-screen bg-gray-100 dark:bg-slate-950">
             <Sidebar
                 isOpen={isSidebarOpen}
                 onClose={closeSidebar}
@@ -395,9 +412,9 @@ const App: React.FC = () => {
                                         initialAnswers={userAnswers}
                                         initialTimeLeft={initialTimeLeft}
                                         attempts={attempts}
-                                        initialQuestionIndex={initialCurrentQuestionIndex} // Pass restored current question index
-                                        initialOrderedQuestions={initialOrderedQuestions} // Pass restored question order
-                                        initialFlaggedQuestions={initialFlaggedQuestions} // Pass restored flagged questions
+                                        initialQuestionIndex={initialCurrentQuestionIndex} 
+                                        initialOrderedQuestions={initialOrderedQuestions} 
+                                        initialFlaggedQuestions={initialFlaggedQuestions} 
                                     />
                                 ) : (
                                     <div className="text-center text-red-500 dark:text-red-400">Nenhum exame carregado. Volte para a configuração.</div>
@@ -410,7 +427,7 @@ const App: React.FC = () => {
                                         userAnswers={userAnswers}
                                         attempt={currentAttempt}
                                         history={attempts}
-                                        onTryAgain={() => handleNavigate('/')} // Volta para a tela de configuração
+                                        onTryAgain={() => handleNavigate('/')} 
                                         onGenerateStudyPlan={handleGenerateStudyPlan}
                                         onStartReview={handleStartReview}
                                         onViewAttemptHistory={() => handleNavigate('/history')}
@@ -458,8 +475,8 @@ const App: React.FC = () => {
                                     attempts={attempts}
                                     onBack={() => handleNavigate('/')}
                                     onViewDetails={(attempt) => {
-                                        setCurrentAttempt(attempt); // Define a tentativa para visualização detalhada
-                                        navigate(`/history/${attempt.timestamp}`); // Navega para a rota de detalhes
+                                        setCurrentAttempt(attempt); 
+                                        navigate(`/history/${attempt.timestamp}`); 
                                     }}
                                 />
                             } />
