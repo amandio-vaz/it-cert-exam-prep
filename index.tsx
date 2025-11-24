@@ -1,5 +1,3 @@
-
-
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -85,7 +83,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 // Wrap ErrorBoundary with the HOC to provide navigate prop
-const ErrorBoundaryWithRouter = withRouter(ErrorBoundary);
+const ErrorBoundaryWithRouter = withRouter<Omit<ErrorBoundaryProps, 'navigate'>>(ErrorBoundary);
 
 document.addEventListener('DOMContentLoaded', () => {
   const rootElement = document.getElementById('root');

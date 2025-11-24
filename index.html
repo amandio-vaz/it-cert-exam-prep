@@ -1,24 +1,10 @@
-
-<script type="importmap">
-{
-  "imports": {
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "pdf-lib": "https://aistudiocdn.com/pdf-lib@^1.17.1",
-    "@/": "./"
-  }
-}
-</script>
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Favicon removed to prevent potential parsing errors. Consider linking to a separate favicon.png file. -->
     <title>Cortex MyF*ck-IT-Exam</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <style>
       /* Basic CSS for dark mode transition and scrollbar */
       html.dark {
@@ -132,11 +118,26 @@
         border-radius: 2px;
       }
 
-      /* To make the overlay effect of the pseudo element work, we need to ensure the textarea background is transparent */
+      /* Garantir fundo transparente no textarea */
       textarea.relative.z-10.bg-transparent {
-          background-color: transparent !important;
+        background-color: transparent !important;
       }
     </style>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+        "pdf-lib": "https://aistudiocdn.com/pdf-lib@^1.17.1",
+        "@/": "./"
+      }
+    }
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body>

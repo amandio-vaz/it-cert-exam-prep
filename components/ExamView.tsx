@@ -136,14 +136,18 @@ const QuestionJumpModal: React.FC<{
 }> = ({ isOpen, onClose, onJump, questions, answered, flagged, isNavigationDisabled }) => { // NOVO prop
     const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
-    const domains = [...new Set(questions.map(q => q.domain))];
+    
+    // Extrai domínios únicos das questões
+    const domains = useMemo(() => [...new Set(questions.map(q => q.domain || 'Geral'))].sort(), [questions]);
 
     const filteredQuestions = useMemo(() => {
         return questions.map((q, index) => ({ question: q, originalIndex: index }))
             .filter(({ question }) => {
-                const domainMatch = !selectedDomain || question.domain === selectedDomain;
+                // Filtro por domínio
+                const domainMatch = !selectedDomain || (question.domain || 'Geral') === selectedDomain;
                 if (!domainMatch) return false;
 
+                // Filtro por status
                 switch (filterStatus) {
                     case 'answered': return answered.includes(question.id);
                     case 'unanswered': return !answered.includes(question.id);
@@ -162,13 +166,15 @@ const QuestionJumpModal: React.FC<{
             onClick={onClose}
         >
             <div 
-                className="bg-white/95 dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl p-6 w-full max-w-2xl relative animate-fade-in-slide-up"
+                className="bg-white/95 dark:bg-slate-900/80 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl p-6 w-full max-w-2xl relative animate-fade-in-slide-up flex flex-col max-h-[90vh]"
                 onClick={e => e.stopPropagation()}
             >
-                <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors" disabled={isNavigationDisabled}>
-                    <XMarkIcon className="w-6 h-6" />
-                </button>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Ir para Questão</h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Ir para Questão</h2>
+                    <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors" disabled={isNavigationDisabled}>
+                        <XMarkIcon className="w-6 h-6" />
+                    </button>
+                </div>
                 
                  <div className="mb-4">
                     <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filtrar por Status</h3>
@@ -186,15 +192,14 @@ const QuestionJumpModal: React.FC<{
                     </div>
                 </div>
 
-
                 <div className="mb-4">
                     <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filtrar por Domínio</h3>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto custom-scrollbar pr-1">
                         {domains.map(domain => (
                             <button 
                                 key={domain} 
                                 onClick={() => setSelectedDomain(d => d === domain ? null : domain)}
-                                className={`px-3 py-1.5 text-sm rounded-full transition-colors border ${selectedDomain === domain ? 'bg-cyan-500/20 border-cyan-500 text-cyan-600 dark:text-cyan-300' : 'bg-gray-100 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700'}`}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors border whitespace-nowrap ${selectedDomain === domain ? 'bg-violet-500/20 border-violet-500 text-violet-600 dark:text-violet-300' : 'bg-gray-100 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                                 disabled={isNavigationDisabled} // Desabilita botão durante transição
                             >
                                 {domain}
@@ -203,7 +208,7 @@ const QuestionJumpModal: React.FC<{
                     </div>
                 </div>
 
-                <div className="p-4 bg-gray-100 dark:bg-slate-800/50 rounded-md border border-gray-200 dark:border-slate-700 max-h-60 overflow-y-auto">
+                <div className="p-4 bg-gray-100 dark:bg-slate-800/50 rounded-md border border-gray-200 dark:border-slate-700 overflow-y-auto flex-grow custom-scrollbar">
                      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
                         {filteredQuestions.map(({ question, originalIndex }) => {
                              const isAnswered = answered.includes(question.id);
@@ -212,16 +217,22 @@ const QuestionJumpModal: React.FC<{
                                 <button 
                                     key={question.id}
                                     onClick={() => onJump(originalIndex)}
-                                    className={`relative flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm border bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-cyan-400 hover:text-black ${isFlagged ? 'border-amber-500' : 'border-gray-300 dark:border-slate-600'}`}
+                                    className={`relative flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm border bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-cyan-400 hover:text-black hover:scale-105 ${isFlagged ? 'border-amber-500 ring-1 ring-amber-500' : 'border-gray-300 dark:border-slate-600'}`}
                                     disabled={isNavigationDisabled} // Desabilita botão durante transição
                                 >
                                     {originalIndex + 1}
-                                    {isAnswered && !isFlagged && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-green-500"></span>}
+                                    {isAnswered && !isFlagged && <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-green-500"></span>}
+                                    {isFlagged && <span className="absolute -top-1 -right-1 text-amber-500"><BookmarkIcon className="w-3 h-3 fill-current" /></span>}
                                 </button>
                             );
                         })}
                      </div>
-                     {filteredQuestions.length === 0 && <p className="text-center text-gray-500 dark:text-gray-400">Nenhuma questão encontrada com os filtros selecionados.</p>}
+                     {filteredQuestions.length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-32 text-gray-500 dark:text-gray-400">
+                            <MagnifyingGlassIcon className="w-8 h-8 mb-2 opacity-50" />
+                            <p>Nenhuma questão encontrada com os filtros selecionados.</p>
+                        </div>
+                     )}
                 </div>
             </div>
         </div>
