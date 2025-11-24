@@ -419,6 +419,32 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         }
     };
 
+    const handleStartExamClick = () => {
+        let hasError = false;
+
+        if (uploadedFiles.length === 0) {
+            addNotification('error', 'Por favor, carregue pelo menos um material de estudo antes de iniciar.');
+            hasError = true;
+        }
+
+        if (!examCode.trim()) {
+            addNotification('error', 'O código do exame é obrigatório para gerar questões relevantes.');
+            // Focar no input se estiver vazio
+            const input = document.getElementById('exam-code');
+            if (input) input.focus();
+            hasError = true;
+        }
+
+        if (processingFiles.length > 0) {
+             addNotification('warning', 'Aguarde o término do processamento dos arquivos.');
+             hasError = true;
+        }
+
+        if (hasError) return;
+
+        onStartExam(language);
+    };
+
     const canStart = examCode.trim() !== '' && uploadedFiles.length > 0 && processingFiles.length === 0;
 
     // Lógica para o verificador ortográfico
@@ -693,8 +719,8 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                 <div className="pt-4">
                     {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
                     <button 
-                        onClick={() => onStartExam(language)} 
-                        disabled={!canStart} 
+                        onClick={handleStartExamClick} 
+                        disabled={processingFiles.length > 0} 
                         className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-gradient-to-r from-purple-600 to-violet-500 hover:from-purple-700 hover:to-violet-600 disabled:from-slate-600 disabled:to-slate-700 disabled:text-gray-400 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-violet-500 transition-all duration-200 shadow-lg hover:shadow-violet-500/40 transform hover:-translate-y-1"
                     >
                         <SparklesIcon className="w-5 h-5" />
