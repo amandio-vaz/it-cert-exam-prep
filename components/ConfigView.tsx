@@ -486,7 +486,18 @@ const ConfigView: React.FC<ConfigViewProps> = ({
             <div className="bg-slate-900/70 backdrop-blur-lg rounded-2xl p-8 border border-slate-700/50 shadow-2xl space-y-8">
                 
                 <div className="space-y-4">
-                    <h2 className="text-lg font-semibold text-white">1. Adicione seus materiais de estudo</h2>
+                    <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-semibold text-white">1. Adicione seus materiais de estudo</h2>
+                        <div className="relative group">
+                            <InformationCircleIcon className="w-5 h-5 text-gray-400 cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 text-xs text-gray-200 bg-slate-800 border border-slate-700 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible z-20 pointer-events-none">
+                                <p className="font-semibold mb-1 text-cyan-400">Base de Conhecimento</p>
+                                <p>Carregue apostilas, documentação oficial ou seus resumos. A qualidade das questões depende deste conteúdo.</p>
+                                <p className="mt-1 text-gray-400">Formatos: PDF, DOCX, MD, HTML, Imagens.</p>
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-700"></div>
+                            </div>
+                        </div>
+                    </div>
                     <label
                         htmlFor="file-upload-input"
                         onDragEnter={handleDragEnter}
@@ -599,8 +610,10 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                         <h2 className="text-lg font-semibold text-white">2. Insira o código do exame</h2>
                         <div className="relative group">
                             <InformationCircleIcon className="w-5 h-5 text-gray-400 cursor-help" />
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 text-sm text-gray-200 bg-slate-700 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible z-10">
-                                Insira o código oficial da certificação (ex: AZ-900). Isso ajuda a IA a focar nos tópicos corretos.
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 text-xs text-gray-200 bg-slate-800 border border-slate-700 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible z-20 pointer-events-none">
+                                <p className="font-semibold mb-1 text-cyan-400">Contexto do Exame</p>
+                                <p>O código ajuda a IA a alinhar a dificuldade e o estilo das perguntas.</p>
+                                <p className="mt-1 text-gray-400">Exemplos: <strong>AZ-900</strong>, <strong>CCNA 200-301</strong>, <strong>AWS-CLF-C02</strong>.</p>
                                 <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-700"></div>
                             </div>
                         </div>

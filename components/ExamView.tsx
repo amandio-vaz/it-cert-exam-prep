@@ -464,39 +464,65 @@ const ExamView: React.FC<ExamViewProps> = ({
     }, [currentQuestionIndex, animationKey, isTransitioning, isMountedRef]);
 
 
+    // Function to pre-fetch title for the next question (without setting UI state)
+    const prefetchTitle = useCallback(async (index: number) => {
+        if (index < 0 || index >= orderedQuestions.length) return;
+        const q = orderedQuestions[index];
+        if (!q) return;
+        if (titleCache.current.has(q.id)) return; // Already cached
+
+        try {
+            const fullText = q.scenario ? `${q.scenario}\n${q.text}` : q.text;
+            const newTitle = await generateQuestionTitle(fullText);
+            titleCache.current.set(q.id, newTitle);
+        } catch (e) {
+            // Silent fail for prefetch is fine
+            // console.warn("Prefetch failed for index " + index);
+        }
+    }, [orderedQuestions]);
+
     useEffect(() => {
-        const generateTitle = async () => {
+        const loadTitles = async () => {
             const currentQuestion = orderedQuestions[currentQuestionIndex];
             if (!currentQuestion) return;
 
             const questionId = currentQuestion.id;
+            
+            // 1. Load CURRENT question title (Update UI)
             if (titleCache.current.has(questionId)) {
                 if (isMountedRef.current) {
                     setCurrentQuestionTitle(titleCache.current.get(questionId)!);
                 }
-                return;
+            } else {
+                if (isMountedRef.current) setIsTitleLoading(true);
+                if (isMountedRef.current) setCurrentQuestionTitle(''); 
+                try {
+                    const fullText = currentQuestion.scenario ? `${currentQuestion.scenario}\n${currentQuestion.text}` : currentQuestion.text;
+                    const newTitle = await generateQuestionTitle(fullText);
+                    titleCache.current.set(questionId, newTitle);
+                    if (isMountedRef.current) {
+                        setCurrentQuestionTitle(newTitle);
+                    }
+                } catch (e) {
+                    console.error("Falha ao gerar o título da questão", e);
+                } finally {
+                    if (isMountedRef.current) {
+                        setIsTitleLoading(false);
+                    }
+                }
             }
 
-            if (isMountedRef.current) setIsTitleLoading(true);
-            if (isMountedRef.current) setCurrentQuestionTitle(''); 
-            try {
-                const fullText = currentQuestion.scenario ? `${currentQuestion.scenario}\n${currentQuestion.text}` : currentQuestion.text;
-                const newTitle = await generateQuestionTitle(fullText);
-                titleCache.current.set(questionId, newTitle);
+            // 2. Pre-fetch NEXT question title (Background)
+            // Small delay to prioritize the main thread for the current question's UI updates
+            setTimeout(() => {
                 if (isMountedRef.current) {
-                    setCurrentQuestionTitle(newTitle);
+                    prefetchTitle(currentQuestionIndex + 1);
                 }
-            } catch (e) {
-                console.error("Falha ao gerar o título da questão", e);
-            } finally {
-                if (isMountedRef.current) {
-                    setIsTitleLoading(false);
-                }
-            }
+            }, 500);
         };
 
-        generateTitle();
-    }, [currentQuestionIndex, orderedQuestions]);
+        loadTitles();
+    }, [currentQuestionIndex, orderedQuestions, prefetchTitle]);
 
 
     useEffect(() => {
