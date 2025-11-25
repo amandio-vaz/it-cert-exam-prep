@@ -1,4 +1,3 @@
-
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { UploadedFile, Attempt } from '../types';
 import { fileToArrayBuffer, uint8ArrayToBase64 } from '../utils/fileUtils';
@@ -138,7 +137,7 @@ const ConfigView: React.FC<ConfigViewProps> = ({
         const SpeechRecognitionConstructor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
         if (!SpeechRecognitionConstructor) {
-            console.warn("Web Speech API not supported by this browser. Voice input disabled.");
+            // Suppress warning to user, just set flag
             voiceInputSupported.current = false;
             return; // Exit if not supported
         }
@@ -672,7 +671,16 @@ const ConfigView: React.FC<ConfigViewProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="space-y-3">
-                        <h2 className="text-lg font-semibold text-white">3. Questões</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-white">3. Questões</h2>
+                            <div className="relative group">
+                                <InformationCircleIcon className="w-5 h-5 text-gray-400 cursor-help" />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 text-sm text-gray-200 bg-slate-700 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible z-10 pointer-events-none">
+                                    Defina a quantidade de questões para o simulado. Recomendamos entre 10 e 30 para uma sessão de estudo equilibrada.
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-700"></div>
+                                </div>
+                            </div>
+                        </div>
                         <input 
                             type="number" 
                             id="question-count" 
@@ -687,7 +695,16 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                         />
                     </div>
                     <div className="space-y-3">
-                        <h2 className="text-lg font-semibold text-white">4. Idioma</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-white">4. Idioma</h2>
+                            <div className="relative group">
+                                <InformationCircleIcon className="w-5 h-5 text-gray-400 cursor-help" />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 text-sm text-gray-200 bg-slate-700 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible z-10 pointer-events-none">
+                                    Escolha o idioma para a geração das questões e explicações. A IA adaptará o conteúdo para o idioma selecionado.
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-700"></div>
+                                </div>
+                            </div>
+                        </div>
                         <div className="flex bg-slate-800/60 border border-slate-700 rounded-lg p-1">
                              <button onClick={() => setLanguage('pt-BR')} className={`w-1/2 rounded-md py-2 text-sm font-semibold transition-colors ${language === 'pt-BR' ? 'bg-violet-500 text-white' : 'text-gray-400 hover:bg-slate-700/50'}`}>
                                 Português (BR)
@@ -732,7 +749,13 @@ const ConfigView: React.FC<ConfigViewProps> = ({
                 </div>
 
                 <div className="pt-4">
-                    {error && <p className="text-red-400 text-sm text-center mb-4">{error}</p>}
+                    {error && (
+                        <div className="mb-6 p-4 border-2 border-indigo-500/50 bg-slate-900/50 rounded-lg animate-pulse">
+                            <p className="text-red-400 text-sm text-center font-medium leading-relaxed">
+                                {error}
+                            </p>
+                        </div>
+                    )}
                     <button 
                         onClick={handleStartExamClick} 
                         disabled={processingFiles.length > 0} 

@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type, Modality, GenerateContentResponse, Schema } from "@google/genai";
 import { UploadedFile, ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
 
 const API_KEY = process.env.API_KEY;
@@ -15,7 +15,8 @@ const getGenAI = (): GoogleGenAI => {
   return aiInstance;
 };
 
-const examSchema = {
+// Cast the object to Schema type to satisfy the API
+const examSchema: Schema = {
   type: Type.OBJECT,
   properties: {
     examCode: { type: Type.STRING },
@@ -69,9 +70,6 @@ You are an advanced expert in IT certification exam preparation. Your main goal 
 
 3. Practice Exam Generation:
    - Generate a set of realistic questions based on the analysis.
-   - Your response MUST be ONLY a valid JSON object, with no other text, markdown, or explanation before or after it.
-   - The JSON must strictly adhere to the following schema:
-   ${JSON.stringify(examSchema, null, 2)}
 `;
     }
 
@@ -88,9 +86,6 @@ Você é um especialista avançado em preparação para exames de certificação
 
 3. Geração de Exame Prático:
    - Gere um conjunto de questões realistas com base na análise.
-   - A sua resposta DEVE ser APENAS um objeto JSON válido, sem nenhum outro texto, markdown ou explicação antes ou depois dele.
-   - O JSON deve seguir estritamente o seguinte esquema:
-   ${JSON.stringify(examSchema, null, 2)}
 `;
 };
 
@@ -188,6 +183,9 @@ export const generateExam = async (
     const config = {
         systemInstruction,
         tools: [{ googleSearch: {} }],
+        // Use Structured Outputs to guarantee valid JSON
+        responseMimeType: 'application/json',
+        responseSchema: examSchema,
         // pt-BR: Limita o output para o máximo seguro do modelo para evitar erros de limite.
         // en-US: Caps output to the model's safe maximum to avoid limit errors.
         maxOutputTokens: 8192,
@@ -200,23 +198,18 @@ export const generateExam = async (
         config
     });
 
-    let jsonText = (response.text || '').trim();
+    const jsonText = (response.text || '').trim();
     
-    // Remove markdown code blocks (case insensitive for JSON/json)
-    jsonText = jsonText.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, '$1');
-
-    // Fallback: Tenta encontrar o objeto JSON se houver texto extra ao redor
-    const firstBrace = jsonText.indexOf('{');
-    const lastBrace = jsonText.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1) {
-        jsonText = jsonText.substring(firstBrace, lastBrace + 1);
-    }
-
     try {
         const parsedJson = JSON.parse(jsonText);
         return parsedJson as ExamData;
     } catch (error) {
         console.error("Failed to parse JSON response:", jsonText);
+        // Fallback: Tenta encontrar o objeto JSON se houver texto extra ao redor (unlikely with structured output but safe to keep)
+        const match = jsonText.match(/\{[\s\S]*\}/);
+        if (match) {
+             return JSON.parse(match[0]) as ExamData;
+        }
         throw new Error("A resposta da IA não estava em um formato JSON válido. O conteúdo gerado pode ter sido cortado ou corrompido.");
     }
 };
@@ -369,9 +362,11 @@ export const analyzeImageWithGemini = async (image: UploadedFile, prompt: string
     return response.text || '';
 };
 
-export const generateQuestionTitle = async (questionText: string): Promise<string> => {
+export const generateQuestionTitle = async (questionText: string, language: 'pt-BR' | 'en-US' = 'pt-BR'): Promise<string> => {
     const ai = getGenAI();
-    const prompt = `Gere um título curto e conciso (máximo 5 palavras) que resuma a seguinte questão de certificação de TI. O título deve capturar o conceito principal testado. Retorne apenas o texto do título, sem formatação extra ou explicação. Questão: "${questionText}"`;
+    const prompt = language === 'en-US'
+        ? `Generate a short and concise title (max 5 words) summarizing the following IT certification question. The title must capture the main concept tested. Return only the title text, without extra formatting or explanation. Question: "${questionText}"`
+        : `Gere um título curto e conciso (máximo 5 palavras) que resuma a seguinte questão de certificação de TI. O título deve capturar o conceito principal testado. Retorne apenas o texto do título, sem formatação extra ou explicação. Questão: "${questionText}"`;
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',

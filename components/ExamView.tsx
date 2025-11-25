@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ExamData, Question, UserAnswer, QuestionType, Attempt } from '../types';
 import { generateQuestionTitle } from '../services/geminiService';
@@ -16,7 +15,21 @@ interface ExamViewProps {
     initialFlaggedQuestions?: string[] | null; // NOVO: Questões sinalizadas a serem restauradas
 }
 
-const getQuestionTypeExplanation = (type: QuestionType): string => {
+const getQuestionTypeExplanation = (type: QuestionType, language: 'pt-BR' | 'en-US'): string => {
+    if (language === 'en-US') {
+        switch (type) {
+            case QuestionType.SingleChoice:
+                return "Single Choice: Only one option can be selected as correct.";
+            case QuestionType.MultipleChoice:
+                return "Multiple Choice: One or more options can be selected as correct.";
+            case QuestionType.Scenario:
+                return "Scenario Based: Read the scenario carefully before answering.";
+            case QuestionType.TrueFalse:
+                return "True or False: Determine if the statement is true or false.";
+            default:
+                return "Standard question type.";
+        }
+    }
     switch (type) {
         case QuestionType.SingleChoice:
             return "Escolha Única: Apenas uma opção pode ser selecionada como correta.";
@@ -42,7 +55,8 @@ const QuestionCard: React.FC<{
     isFlagged: boolean;
     onToggleFlag: () => void;
     isNavigationDisabled: boolean; // NOVO: para desabilitar opções durante transição de questão
-}> = ({ question, userAnswer, onAnswerChange, questionNumber, totalQuestions, title, isTitleLoading, isFlagged, onToggleFlag, isNavigationDisabled }) => { // NOVO prop
+    language: 'pt-BR' | 'en-US';
+}> = ({ question, userAnswer, onAnswerChange, questionNumber, totalQuestions, title, isTitleLoading, isFlagged, onToggleFlag, isNavigationDisabled, language }) => { // NOVO prop
 
     const handleSingleChoiceChange = (optionId: string) => {
         if (isNavigationDisabled) return; // Desabilita mudança de resposta durante transição
@@ -57,24 +71,29 @@ const QuestionCard: React.FC<{
         onAnswerChange(newAnswer);
     };
 
+    const questionText = language === 'en-US' ? `Question ${questionNumber} of ${totalQuestions}` : `Questão ${questionNumber} de ${totalQuestions}`;
+    const multipleChoiceText = language === 'en-US' ? "Select all applicable options." : "Selecione todas as opções aplicáveis.";
+    const singleChoiceText = language === 'en-US' ? "Select one option." : "Selecione uma opção.";
+    const flagTitle = isFlagged ? (language === 'en-US' ? "Remove flag" : "Remover sinalização") : (language === 'en-US' ? "Flag for review" : "Sinalizar para revisão");
+
     return (
         <div className="bg-white dark:bg-slate-900/50 backdrop-blur-sm border border-gray-200 dark:border-slate-700/50 rounded-xl p-6 w-full shadow-lg h-full flex flex-col">
             <div className="flex justify-between items-start mb-4">
                 <div className="flex flex-col gap-1">
                    <p className="text-sm text-cyan-500 dark:text-cyan-400 font-semibold">{question.domain}</p>
                    <div className="flex items-center gap-2">
-                     <p className="text-sm text-gray-500 dark:text-gray-400">Questão {questionNumber} de {totalQuestions}</p>
+                     <p className="text-sm text-gray-500 dark:text-gray-400">{questionText}</p>
                      <div className="relative group">
                             <InformationCircleIcon className="w-4 h-4 text-gray-400 cursor-help" />
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max p-2 text-xs text-gray-200 bg-slate-700 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible z-10">
-                                {getQuestionTypeExplanation(question.type)}
+                                {getQuestionTypeExplanation(question.type, language)}
                                 <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-slate-700"></div>
                             </div>
                         </div>
                    </div>
                 </div>
                  <div className="flex items-center gap-2">
-                    <button onClick={onToggleFlag} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors" title={isFlagged ? "Remover sinalização" : "Sinalizar para revisão"} disabled={isNavigationDisabled}>
+                    <button onClick={onToggleFlag} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors" title={flagTitle} disabled={isNavigationDisabled}>
                         <BookmarkIcon className={`w-6 h-6 ${isFlagged ? 'text-amber-500 fill-current' : ''}`} />
                     </button>
                     {/* Fix: Pass the disabled prop to AudioPlayer */}
@@ -118,7 +137,7 @@ const QuestionCard: React.FC<{
                     );
                 })}
             </div>
-             <p className="text-xs text-gray-500 dark:text-gray-500 mt-4 text-center">{question.type === QuestionType.MultipleChoice ? "Selecione todas as opções aplicáveis." : "Selecione uma opção."}</p>
+             <p className="text-xs text-gray-500 dark:text-gray-500 mt-4 text-center">{question.type === QuestionType.MultipleChoice ? multipleChoiceText : singleChoiceText}</p>
         </div>
     );
 };
@@ -133,7 +152,9 @@ const QuestionJumpModal: React.FC<{
     answered: string[];
     flagged: string[];
     isNavigationDisabled: boolean; // NOVO: para desabilitar navegação durante transição
-}> = ({ isOpen, onClose, onJump, questions, answered, flagged, isNavigationDisabled }) => { // NOVO prop
+    language: 'pt-BR' | 'en-US';
+    onLanguageChange: (lang: 'pt-BR' | 'en-US') => void;
+}> = ({ isOpen, onClose, onJump, questions, answered, flagged, isNavigationDisabled, language, onLanguageChange }) => { // NOVO prop
     const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
     
@@ -160,6 +181,25 @@ const QuestionJumpModal: React.FC<{
 
     if (!isOpen) return null;
 
+    const texts = {
+        'pt-BR': {
+            title: 'Ir para Questão',
+            filterStatus: 'Filtrar por Status',
+            filterDomain: 'Filtrar por Domínio',
+            status: { all: 'Todas', answered: 'Respondidas', unanswered: 'Não Respondidas', flagged: 'Sinalizadas' },
+            noQuestions: 'Nenhuma questão encontrada com os filtros selecionados.',
+        },
+        'en-US': {
+            title: 'Jump to Question',
+            filterStatus: 'Filter by Status',
+            filterDomain: 'Filter by Domain',
+            status: { all: 'All', answered: 'Answered', unanswered: 'Unanswered', flagged: 'Flagged' },
+            noQuestions: 'No questions found with selected filters.',
+        }
+    };
+    
+    const t = texts[language];
+
     return (
         <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 fade-in transition-opacity duration-300"
@@ -170,14 +210,30 @@ const QuestionJumpModal: React.FC<{
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Ir para Questão</h2>
-                    <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors" disabled={isNavigationDisabled}>
-                        <XMarkIcon className="w-6 h-6" />
-                    </button>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t.title}</h2>
+                    <div className="flex items-center gap-2">
+                        <div className="flex bg-gray-100 dark:bg-slate-800 rounded-md p-1 mr-2">
+                             <button
+                                onClick={() => onLanguageChange('pt-BR')}
+                                className={`px-2 py-1 text-xs font-semibold rounded transition-colors ${language === 'pt-BR' ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}
+                            >
+                                PT
+                            </button>
+                            <button
+                                onClick={() => onLanguageChange('en-US')}
+                                className={`px-2 py-1 text-xs font-semibold rounded transition-colors ${language === 'en-US' ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}
+                            >
+                                EN
+                            </button>
+                        </div>
+                        <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors" disabled={isNavigationDisabled}>
+                            <XMarkIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
                 
                  <div className="mb-4">
-                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filtrar por Status</h3>
+                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">{t.filterStatus}</h3>
                     <div className="flex flex-wrap gap-2">
                         {(['all', 'answered', 'unanswered', 'flagged'] as FilterStatus[]).map(status => (
                             <button
@@ -186,14 +242,14 @@ const QuestionJumpModal: React.FC<{
                                 className={`px-3 py-1.5 text-sm rounded-full transition-colors border ${filterStatus === status ? 'bg-cyan-500/20 border-cyan-500 text-cyan-600 dark:text-cyan-300' : 'bg-gray-100 dark:bg-slate-800/60 border-gray-300 dark:border-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700'}`}
                                 disabled={isNavigationDisabled} // Desabilita botão durante transição
                             >
-                                { {all: 'Todas', answered: 'Respondidas', unanswered: 'Não Respondidas', flagged: 'Sinalizadas'}[status] }
+                                { t.status[status] }
                             </button>
                         ))}
                     </div>
                 </div>
 
                 <div className="mb-4">
-                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Filtrar por Domínio</h3>
+                    <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">{t.filterDomain}</h3>
                     <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto custom-scrollbar pr-1">
                         {domains.map(domain => (
                             <button 
@@ -230,7 +286,7 @@ const QuestionJumpModal: React.FC<{
                      {filteredQuestions.length === 0 && (
                         <div className="flex flex-col items-center justify-center h-32 text-gray-500 dark:text-gray-400">
                             <MagnifyingGlassIcon className="w-8 h-8 mb-2 opacity-50" />
-                            <p>Nenhuma questão encontrada com os filtros selecionados.</p>
+                            <p>{t.noQuestions}</p>
                         </div>
                      )}
                 </div>
@@ -248,7 +304,8 @@ const QuestionNavigator: React.FC<{
     onOpenJumpModal: () => void;
     onReorder: (dragIndex: number, dropIndex: number) => void; // Add onReorder prop
     isNavigationDisabled: boolean; // NOVO: para desabilitar navegação durante transição
-}> = ({ questions, current, answered, flagged, onJump, onOpenJumpModal, onReorder, isNavigationDisabled }) => { // NOVO prop
+    language: 'pt-BR' | 'en-US';
+}> = ({ questions, current, answered, flagged, onJump, onOpenJumpModal, onReorder, isNavigationDisabled, language }) => { // NOVO prop
     const [searchQuery, setSearchQuery] = useState('');
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -297,11 +354,29 @@ const QuestionNavigator: React.FC<{
         setDragOverIndex(null);
     };
 
+    const texts = {
+        'pt-BR': {
+            navTitle: 'Navegação do Exame',
+            placeholder: 'Filtrar questões...',
+            clear: 'Limpar busca',
+            jumpTo: 'Ir para...',
+            question: 'Ir para a questão'
+        },
+        'en-US': {
+            navTitle: 'Exam Navigation',
+            placeholder: 'Filter questions...',
+            clear: 'Clear search',
+            jumpTo: 'Jump to...',
+            question: 'Jump to question'
+        }
+    };
+    const t = texts[language];
+
     return (
         <div className="bg-white dark:bg-slate-900/50 backdrop-blur-sm border border-gray-200 dark:border-slate-700/50 rounded-xl p-4 sticky top-28 shadow-lg">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Squares2X2Icon className="w-5 h-5 text-cyan-500 dark:text-cyan-400" />
-                Navegação do Exame
+                {t.navTitle}
             </h3>
              <div className="relative mb-4">
                 <MagnifyingGlassIcon className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none" />
@@ -309,7 +384,7 @@ const QuestionNavigator: React.FC<{
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filtrar questões..."
+                    placeholder={t.placeholder}
                     className="w-full pl-8 pr-8 py-1.5 text-sm bg-gray-100 dark:bg-slate-800/60 border border-gray-300 dark:border-slate-700 rounded-md focus:ring-cyan-500/50 focus:border-cyan-400 text-gray-800 dark:text-gray-200 transition-colors"
                     disabled={isNavigationDisabled} // Desabilita input durante transição
                 />
@@ -317,7 +392,7 @@ const QuestionNavigator: React.FC<{
                     <button 
                         onClick={() => setSearchQuery('')}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                        aria-label="Limpar busca"
+                        aria-label={t.clear}
                         disabled={isNavigationDisabled} // Desabilita botão durante transição
                     >
                         <XMarkIcon className="w-4 h-4" />
@@ -358,7 +433,7 @@ const QuestionNavigator: React.FC<{
                             onDrop={(e) => handleDrop(e, originalIndex)}
                             onDragEnd={handleDragEnd}
                             className={`relative flex items-center justify-center w-10 h-10 rounded-md transition-all duration-200 text-sm ${buttonClass}`}
-                            aria-label={`Ir para a questão ${originalIndex + 1}`}
+                            aria-label={`${t.question} ${originalIndex + 1}`}
                             aria-current={isCurrent ? 'page' : undefined}
                             disabled={isNavigationDisabled} // Desabilita botão durante transição
                         >
@@ -377,7 +452,7 @@ const QuestionNavigator: React.FC<{
                     disabled={isNavigationDisabled} // Desabilita botão durante transição
                 >
                     <SquaresPlusIcon className="w-5 h-5" />
-                    Ir para...
+                    {t.jumpTo}
                 </button>
             </div>
         </div>
@@ -409,6 +484,7 @@ const ExamView: React.FC<ExamViewProps> = ({
     const [isReadingMode, setIsReadingMode] = useState(false);
     const [currentQuestionTitle, setCurrentQuestionTitle] = useState('');
     const [isTitleLoading, setIsTitleLoading] = useState(false);
+    const [uiLanguage, setUiLanguage] = useState<'pt-BR' | 'en-US'>('pt-BR'); // NOVO: Estado de idioma da interface e títulos
     
     // Inicializa estados a partir das props ou valores padrão
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(
@@ -469,17 +545,20 @@ const ExamView: React.FC<ExamViewProps> = ({
         if (index < 0 || index >= orderedQuestions.length) return;
         const q = orderedQuestions[index];
         if (!q) return;
-        if (titleCache.current.has(q.id)) return; // Already cached
+        
+        // Cache key includes language to support switching
+        const cacheKey = `${q.id}-${uiLanguage}`;
+        if (titleCache.current.has(cacheKey)) return; // Already cached
 
         try {
             const fullText = q.scenario ? `${q.scenario}\n${q.text}` : q.text;
-            const newTitle = await generateQuestionTitle(fullText);
-            titleCache.current.set(q.id, newTitle);
+            const newTitle = await generateQuestionTitle(fullText, uiLanguage);
+            titleCache.current.set(cacheKey, newTitle);
         } catch (e) {
             // Silent fail for prefetch is fine
             // console.warn("Prefetch failed for index " + index);
         }
-    }, [orderedQuestions]);
+    }, [orderedQuestions, uiLanguage]);
 
     useEffect(() => {
         const loadTitles = async () => {
@@ -487,19 +566,20 @@ const ExamView: React.FC<ExamViewProps> = ({
             if (!currentQuestion) return;
 
             const questionId = currentQuestion.id;
+            const cacheKey = `${questionId}-${uiLanguage}`;
             
             // 1. Load CURRENT question title (Update UI)
-            if (titleCache.current.has(questionId)) {
+            if (titleCache.current.has(cacheKey)) {
                 if (isMountedRef.current) {
-                    setCurrentQuestionTitle(titleCache.current.get(questionId)!);
+                    setCurrentQuestionTitle(titleCache.current.get(cacheKey)!);
                 }
             } else {
                 if (isMountedRef.current) setIsTitleLoading(true);
                 if (isMountedRef.current) setCurrentQuestionTitle(''); 
                 try {
                     const fullText = currentQuestion.scenario ? `${currentQuestion.scenario}\n${currentQuestion.text}` : currentQuestion.text;
-                    const newTitle = await generateQuestionTitle(fullText);
-                    titleCache.current.set(questionId, newTitle);
+                    const newTitle = await generateQuestionTitle(fullText, uiLanguage);
+                    titleCache.current.set(cacheKey, newTitle);
                     if (isMountedRef.current) {
                         setCurrentQuestionTitle(newTitle);
                     }
@@ -522,7 +602,7 @@ const ExamView: React.FC<ExamViewProps> = ({
         };
 
         loadTitles();
-    }, [currentQuestionIndex, orderedQuestions, prefetchTitle]);
+    }, [currentQuestionIndex, orderedQuestions, prefetchTitle, uiLanguage]);
 
 
     useEffect(() => {
@@ -664,20 +744,28 @@ const ExamView: React.FC<ExamViewProps> = ({
     }, [currentQuestionIndex, isTransitioning]);
 
     const handleConfirmFinish = useCallback(() => {
-        if (window.confirm('Tem certeza de que deseja finalizar o exame?')) {
+        const msg = uiLanguage === 'en-US' ? 'Are you sure you want to finish the exam?' : 'Tem certeza de que deseja finalizar o exame?';
+        if (window.confirm(msg)) {
             handleFinishExamCallback();
         }
-    }, [handleFinishExamCallback]);
+    }, [handleFinishExamCallback, uiLanguage]);
 
 
     const currentQuestion = orderedQuestions[currentQuestionIndex];
     if (!currentQuestion) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gradient-to-br dark:from-slate-900 dark:via-gray-900 dark:to-black">
-                <p className="text-xl text-gray-700 dark:text-gray-300">Carregando questões...</p>
+                <p className="text-xl text-gray-700 dark:text-gray-300">
+                    {uiLanguage === 'en-US' ? "Loading questions..." : "Carregando questões..."}
+                </p>
             </div>
         );
     }
+
+    const t = {
+        'pt-BR': { prev: 'Anterior', next: 'Próxima', finish: 'Finalizar Exame' },
+        'en-US': { prev: 'Previous', next: 'Next', finish: 'Finish Exam' }
+    }[uiLanguage];
 
     return (
         <div className={`flex flex-col min-h-screen p-4 md:p-8 bg-gray-100 dark:bg-gradient-to-br dark:from-slate-900 dark:via-gray-900 dark:to-black transition-opacity duration-500 ${examViewMounted ? 'opacity-100' : 'opacity-0'}`}>
@@ -708,6 +796,7 @@ const ExamView: React.FC<ExamViewProps> = ({
                                 isFlagged={flaggedQuestions.includes(currentQuestion.id)}
                                 onToggleFlag={() => handleToggleFlag(currentQuestion.id)}
                                 isNavigationDisabled={isTransitioning}
+                                language={uiLanguage}
                             />
                         </div>
                         {/* Navigation Buttons */}
@@ -717,7 +806,7 @@ const ExamView: React.FC<ExamViewProps> = ({
                                 disabled={currentQuestionIndex === 0 || isTransitioning}
                                 className="px-6 py-3 border border-gray-300 dark:border-slate-600 text-base font-medium rounded-xl text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                             >
-                                Anterior
+                                {t.prev}
                             </button>
                             {currentQuestionIndex === orderedQuestions.length - 1 ? (
                                 <button
@@ -725,7 +814,7 @@ const ExamView: React.FC<ExamViewProps> = ({
                                     disabled={isTransitioning}
                                     className="px-6 py-3 border border-transparent text-base font-bold rounded-xl text-black bg-green-500 hover:bg-green-400 disabled:bg-slate-600 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors shadow-lg hover:shadow-green-500/30"
                                 >
-                                    Finalizar Exame
+                                    {t.finish}
                                 </button>
                             ) : (
                                 <button
@@ -733,7 +822,7 @@ const ExamView: React.FC<ExamViewProps> = ({
                                     disabled={isTransitioning}
                                     className="px-6 py-3 border border-transparent text-base font-bold rounded-xl text-black bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-600 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors shadow-lg hover:shadow-cyan-500/30"
                                 >
-                                    Próxima
+                                    {t.next}
                                 </button>
                             )}
                         </div>
@@ -750,6 +839,7 @@ const ExamView: React.FC<ExamViewProps> = ({
                             onOpenJumpModal={() => setIsJumpModalOpen(true)}
                             onReorder={handleReorderQuestions}
                             isNavigationDisabled={isTransitioning}
+                            language={uiLanguage}
                         />
                     </div>
                 </div>
@@ -764,6 +854,8 @@ const ExamView: React.FC<ExamViewProps> = ({
                 answered={Object.keys(answers)}
                 flagged={flaggedQuestions}
                 isNavigationDisabled={isTransitioning}
+                language={uiLanguage}
+                onLanguageChange={setUiLanguage}
             />
 
             {/* Finish Confirmation Modal is handled inline via window.confirm */}

@@ -1,7 +1,7 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { HashRouter, useNavigate, NavigateFunction } from 'react-router-dom';
+import { MemoryRouter, useNavigate, NavigateFunction } from 'react-router-dom';
 import { XCircleIcon } from './components/icons';
 
 // Define a HOC to inject the `useNavigate` hook into a class component
@@ -94,11 +94,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const root = ReactDOM.createRoot(rootElement);
   root.render(
     <React.StrictMode>
-      <HashRouter>
+      <MemoryRouter>
         <ErrorBoundaryWithRouter>
           <App />
         </ErrorBoundaryWithRouter>
-      </HashRouter>
+      </MemoryRouter>
     </React.StrictMode>
   );
 });
